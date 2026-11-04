@@ -65,7 +65,9 @@
 }
 
 body {
-  font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+  font-family: sans-serif,"Inter",system-ui, -apple-system, "Segoe UI";
+  font-size: 20px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -77,6 +79,7 @@ body {
 /* Top bar: solid brand colour. Menus inside it keep normal text colours. */
 .app-header { background: var(--color-primary); color: var(--color-primary-content); }
 .app-header .dropdown-content,
+.app-header .dropdown-content a { background: var(--color-primary); color: var(--color-primary-content); }
 .app-header .select { color: var(--color-base-content); }
 
 /* Cards: thin border and a coloured top edge so they stand out from the page. */
@@ -87,6 +90,7 @@ body {
   background: var(--color-primary);
   color: var(--color-primary-content);
   font-weight: 700;
+  font-size: 14px;
   white-space: nowrap;
 }
 .data-table tbody tr:hover { background: color-mix(in oklab, var(--color-primary) 8%, transparent); }
