@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Add user{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'accounts:user_list' %}">Users</a></li><li>New</li></ul></div>
+  <div class="card bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <h1 class="text-xl font-bold">Add user</h1>
+      {% include "partials/field.html" with field=form.username %}
+      {% include "partials/field.html" with field=form.full_name %}
+      {% include "partials/field.html" with field=form.email %}
+      {% include "partials/field.html" with field=form.temporary_password %}
+      <label class="label mt-2 cursor-pointer gap-3">
+        {{ form.is_admin }}
+        <span class="tooltip tooltip-right" data-tip="{{ form.is_admin.help_text }}">Make this user a group Admin</span>
+      </label>
+      <div class="mt-4 flex gap-2">
+        <button type="submit" class="btn btn-primary">Add user</button>
+        <a href="{% url 'accounts:user_list' %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

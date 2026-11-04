@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{% if audit %}Edit audit{% else %}New audit{% endif %}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li>{% if audit %}<li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit.title }}</a></li><li>Edit</li>{% else %}<li>New</li>{% endif %}</ul></div>
+  <div class="card bg-base-100">
+    {# On a new audit the title follows the audit date (30 Aug 2026 -> "Aug26") until the user types their own. #}
+    <form method="post" class="card-body" novalidate x-ref="form"
+          x-data="{ autoTitle: {% if audit %}false{% else %}true{% endif %} }"
+          @input="if ($event.target.name === 'title') autoTitle = false;
+                  if ($event.target.name === 'audit_date' && autoTitle && $event.target.value) {
+                    const day = new Date($event.target.value + 'T00:00');
+                    $refs.form.title.value = day.toLocaleString('en', {month: 'short'}) + String(day.getFullYear()).slice(2);
+                  }">
+      {% csrf_token %}
+      <h1 class="text-xl font-bold">{% if audit %}Edit audit{% else %}New audit{% endif %}</h1>
+      {% include "partials/field.html" with field=form.branch %}
+      {% include "partials/field.html" with field=form.audit_date %}
+      {% include "partials/field.html" with field=form.title %}
+      {% include "partials/field.html" with field=form.audit_type %}
+      {% include "partials/field.html" with field=form.stock_as_on %}
+      {% for error in form.non_field_errors %}<p class="text-error">{{ error }}</p>{% endfor %}
+      <div class="mt-2 flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if audit %}Save audit{% else %}Create audit{% endif %}</button>
+        <a href="{% if audit %}{% url 'audits:audit_detail' audit.pk %}{% else %}{% url 'audits:audit_list' %}{% endif %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

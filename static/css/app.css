@@ -1,0 +1,111 @@
+/* Stock Audit themes: ink-blue ledger on cool concrete, one safety-amber stripe.
+   Light = "stockaudit", dark = "stockaudit-dark" (switched by static/js/theme.js). */
+[data-theme="stockaudit"] {
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #eef1f4;
+  --color-base-300: #d9dee5;
+  --color-base-content: #1b2430;
+  --color-primary: #1e4d8c;
+  --color-primary-content: #ffffff;
+  --color-secondary: #0e7490;
+  --color-secondary-content: #ffffff;
+  --color-accent: #f2a900;
+  --color-accent-content: #1b2430;
+  --color-neutral: #2b3645;
+  --color-neutral-content: #eef1f4;
+  --color-info: #2f6fb0;
+  --color-info-content: #ffffff;
+  --color-success: #2e7d4f;
+  --color-success-content: #ffffff;
+  --color-warning: #f2a900;
+  --color-warning-content: #1b2430;
+  --color-error: #b3261e;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+[data-theme="stockaudit-dark"] {
+  color-scheme: dark;
+  --color-base-100: #1b2431;
+  --color-base-200: #131a24;
+  --color-base-300: #2b3646;
+  --color-base-content: #e4e9f0;
+  --color-primary: #3f72b8;
+  --color-primary-content: #ffffff;
+  --color-secondary: #22a3c4;
+  --color-secondary-content: #04161c;
+  --color-accent: #f2a900;
+  --color-accent-content: #1b2430;
+  --color-neutral: #0e141c;
+  --color-neutral-content: #dfe5ec;
+  --color-info: #4a90d9;
+  --color-info-content: #0b1220;
+  --color-success: #3fa66b;
+  --color-success-content: #06130c;
+  --color-warning: #f2a900;
+  --color-warning-content: #1b2430;
+  --color-error: #e5574f;
+  --color-error-content: #1a0605;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+body {
+  font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft badges: lighter text in dark theme so they stay readable. */
+[data-theme="stockaudit-dark"] .badge-soft.badge-primary { color: #a9c8f2; }
+.avatar-initial::before { content: attr(data-initial); }
+[x-cloak] { display: none !important; }
+
+/* Top bar: solid brand colour. Menus inside it keep normal text colours. */
+.app-header { background: var(--color-primary); color: var(--color-primary-content); }
+.app-header .dropdown-content,
+.app-header .select { color: var(--color-base-content); }
+
+/* Cards: thin border and a coloured top edge so they stand out from the page. */
+.card { border: 1px solid var(--color-base-300); border-top: 3px solid var(--color-primary); }
+
+/* Tables: coloured heading row, click-to-sort arrows. */
+.data-table thead th {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.data-table tbody tr:hover { background: color-mix(in oklab, var(--color-primary) 8%, transparent); }
+.sort-button { all: unset; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.sort-button::after { content: "\2195"; opacity: 0.5; font-size: 0.85em; }
+th[aria-sort="ascending"] .sort-button::after { content: "\25B2"; opacity: 1; }
+th[aria-sort="descending"] .sort-button::after { content: "\25BC"; opacity: 1; }
+.sort-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Safety-tape stripe under the top bar: the one loud element. */
+.tape-stripe {
+  height: 6px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--color-accent) 0 12px,
+    var(--color-neutral) 12px 24px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

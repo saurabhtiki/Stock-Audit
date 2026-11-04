@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Items{% endblock %}
+{% block content %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-bold">Items <span class="text-base font-normal text-base-content/60">{{ current_company.name }}</span></h1>
+  {% if can_manage %}<a href="{% url 'audits:item_create' %}" class="btn btn-primary">Add item</a>{% endif %}
+</div>
+
+{% if new_count %}
+  <div role="alert" class="alert alert-soft alert-warning mb-4">
+    <span>{{ new_count }} new item{{ new_count|pluralize }} came from ERP uploads and {{ new_count|pluralize:"is,are" }} not reviewed yet.</span>
+    <a href="?show=new" class="btn btn-sm">Show new items</a>
+  </div>
+{% endif %}
+
+<form class="mb-4 flex flex-wrap items-center gap-2" hx-get="{% url 'audits:item_list' %}" hx-target="#item-table" hx-swap="outerHTML" hx-trigger="input delay:300ms, submit">
+  <span class="tooltip" data-tip="Search by item code or description">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search code or description" aria-label="Search items" class="input input-sm w-64">
+  </span>
+  <span class="tooltip" data-tip="Show all, only new, or only inactive items">
+    <select name="show" class="select select-sm w-40" aria-label="Show">
+      <option value="">All items</option>
+      <option value="new" {% if show == "new" %}selected{% endif %}>New (not reviewed)</option>
+      <option value="inactive" {% if show == "inactive" %}selected{% endif %}>Inactive</option>
+    </select>
+  </span>
+</form>
+
+{% include "audits/partials/item_table.html" %}
+{% endblock %}

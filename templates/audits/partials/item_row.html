@@ -1,0 +1,27 @@
+<tr id="item-{{ item.pk }}" class="{% if not item.is_active %}opacity-60{% endif %}">
+  <td class="font-bold">{{ item.code }}</td>
+  <td>{{ item.description }}</td>
+  <td>{{ item.uom }}</td>
+  <td>
+    {% if not item.is_active %}<span class="badge badge-soft">Inactive</span>
+    {% elif item.is_new %}<span class="tooltip" data-tip="Added from an ERP upload. Check it and mark it reviewed."><span class="badge badge-soft badge-warning">New</span></span>
+    {% else %}<span class="badge badge-soft badge-success">Active</span>{% endif %}
+  </td>
+  {% if can_manage %}
+    <td class="whitespace-nowrap text-right">
+      {% if item.is_new %}
+        <span class="tooltip tooltip-left" data-tip="Description and UoM are correct; remove the “New” mark">
+          <button class="btn btn-sm btn-success" hx-post="{% url 'audits:item_review' item.pk %}" hx-target="#item-{{ item.pk }}" hx-swap="outerHTML">Mark reviewed</button>
+        </span>
+      {% endif %}
+      <a href="{% url 'audits:item_edit' item.pk %}" class="btn btn-sm btn-outline btn-primary">Edit</a>
+      <span class="tooltip tooltip-left" data-tip="{% if item.is_active %}Hides this item from the list. Nothing is deleted.{% else %}Turns this item back on.{% endif %}">
+        <button class="btn btn-sm {% if item.is_active %}btn-outline btn-warning{% else %}btn-success{% endif %}"
+                hx-post="{% url 'audits:item_toggle' item.pk %}" hx-target="#item-{{ item.pk }}" hx-swap="outerHTML"
+                hx-confirm="{% if item.is_active %}Deactivate item {{ item.code }}?{% else %}Activate item {{ item.code }} again?{% endif %}">
+          {% if item.is_active %}Deactivate{% else %}Activate{% endif %}
+        </button>
+      </span>
+    </td>
+  {% endif %}
+</tr>

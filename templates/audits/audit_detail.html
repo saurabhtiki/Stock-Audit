@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ audit.title }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li>{{ audit }}</li></ul></div>
+
+<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-bold">{{ audit.title }} {% include "audits/partials/stage_badge.html" %}</h1>
+    <p class="text-base-content/70">{{ audit.branch }} · {{ audit.get_audit_type_display }} · audit date {{ audit.audit_date|date:"d M Y" }} · ERP stock as on {{ audit.stock_as_on|date:"d M Y" }}</p>
+    <p class="text-sm text-base-content/60">Created by {{ audit.created_by.full_name }} on {{ audit.created_at|date:"d M Y H:i" }}</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    {% if can_edit %}<span class="tooltip tooltip-bottom" data-tip="Change title, dates or type (only while ERP Draft)"><a href="{% url 'audits:audit_edit' audit.pk %}" class="btn btn-outline btn-primary">Edit</a></span>{% endif %}
+    {% if can_freeze %}<span class="tooltip tooltip-bottom" data-tip="Set tolerance and lock the ERP lines so counting can start"><a href="{% url 'audits:audit_freeze' audit.pk %}" class="btn btn-primary">Tolerance &amp; freeze</a></span>{% endif %}
+    {% if can_cancel %}<span class="tooltip tooltip-bottom" data-tip="Cancel this audit with a reason. Nothing is deleted."><a href="{% url 'audits:audit_cancel' audit.pk %}" class="btn btn-outline btn-error">Cancel audit</a></span>{% endif %}
+  </div>
+</div>
+
+{% if audit.stage == "cancelled" %}
+  <div role="alert" class="alert alert-soft alert-error mb-4">
+    <span>Cancelled by {{ audit.cancelled_by.full_name }} on {{ audit.cancelled_at|date:"d M Y H:i" }}. Reason: {{ audit.cancel_reason }}</span>
+  </div>
+{% else %}
+  <ul class="steps mb-4 w-full">
+    {% with s=audit.stage %}
+    <li class="step step-primary">ERP Draft</li>
+    <li class="step {% if s == 'erp_frozen' or s == 'checking_done' or s == 'locked' %}step-primary{% endif %}">ERP Frozen</li>
+    <li class="step {% if s == 'checking_done' or s == 'locked' %}step-primary{% endif %}">Checking Done</li>
+    <li class="step {% if s == 'locked' %}step-primary{% endif %}">Locked</li>
+    {% endwith %}
+  </ul>
+{% endif %}
+
+<div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
+  <div class="stat"><div class="stat-title">ERP lines</div><div class="stat-value text-2xl">{{ totals.count|intcomma }}</div></div>
+  <div class="stat"><div class="stat-title">Total ERP value</div><div class="stat-value text-2xl">{{ totals.value|default:0|floatformat:2|intcomma }}</div></div>
+  <div class="stat">
+    <div class="stat-title">Tolerance</div>
+    <div class="stat-value text-2xl">{% if audit.frozen_at %}{{ audit.qty_tolerance|floatformat:"-3" }} qty{% if audit.pct_tolerance is not None %} / {{ audit.pct_tolerance|floatformat:"-2" }} %{% endif %}{% else %}—{% endif %}</div>
+    <div class="stat-desc">{% if audit.frozen_at %}Frozen by {{ audit.frozen_by.full_name }}, {{ audit.frozen_at|date:"d M Y H:i" }}{% else %}Set when ERP stock is frozen{% endif %}</div>
+  </div>
+</div>
+
+{% if can_upload %}
+  <div class="card mb-4 bg-base-100">
+    <form method="post" action="{% url 'audits:erp_upload' audit.pk %}" enctype="multipart/form-data" class="card-body gap-3">
+      {% csrf_token %}
+      <h2 class="card-title">{% if totals.count %}Replace ERP file{% else %}Upload ERP file{% endif %}</h2>
+      <p class="text-sm text-base-content/70">
+        Copy your ERP report into the <a class="link link-secondary" href="{% url 'audits:erp_template' %}">ERP template</a>, then upload it.
+        You will see a preview first. Nothing is saved until you confirm.
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="tooltip" data-tip="{{ upload_form.file.help_text }}">{{ upload_form.file }}</span>
+        <button type="submit" class="btn btn-primary">Check file</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+<section class="mb-6">
+  <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="text-lg font-bold">ERP lines</h2>
+    <span class="tooltip tooltip-left" data-tip="Search by item code or description">
+      <input type="search" name="q" value="{{ q }}" placeholder="Search item code or description" aria-label="Search lines"
+             class="input input-sm w-64"
+             hx-get="{% url 'audits:audit_detail' audit.pk %}" hx-trigger="input changed delay:300ms, search"
+             hx-target="#audit-lines" hx-swap="outerHTML">
+    </span>
+  </div>
+  {% include "audits/partials/audit_lines.html" %}
+</section>
+
+{% if uploads %}
+  <section>
+    <h2 class="mb-2 text-lg font-bold">Uploaded files</h2>
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm data-table" data-table="audit-uploads" data-filter="off">
+        <thead><tr><th>File</th><th>Status</th><th>Uploaded by</th><th>When</th><th class="text-right">Lines</th><th class="text-right">Value</th></tr></thead>
+        <tbody>
+          {% for upload in uploads %}
+            <tr>
+              <td>
+                <a class="link" href="{% url 'audits:upload_download' upload.pk %}" title="Download the original file">{{ upload.original_name }}</a>
+                {% if upload.status == "pending" and can_upload %} · <a class="link link-primary" href="{% url 'audits:upload_preview' upload.pk %}">Preview</a>{% endif %}
+              </td>
+              <td>
+                {% if upload.status == "used" %}<span class="badge badge-soft badge-success">In use</span>
+                {% elif upload.status == "replaced" %}<span class="badge badge-soft">Replaced</span>
+                {% else %}<span class="tooltip" data-tip="Checked but never confirmed"><span class="badge badge-soft badge-warning">Not confirmed</span></span>{% endif %}
+              </td>
+              <td>{{ upload.uploaded_by.full_name }}</td>
+              <td data-sort="{{ upload.uploaded_at|date:'c' }}">{{ upload.uploaded_at|date:"d M Y H:i" }}</td>
+              <td class="text-right">{% if upload.status != "pending" %}{{ upload.line_count|intcomma }}{% endif %}</td>
+              <td class="text-right">{% if upload.status != "pending" %}{{ upload.total_value|floatformat:2|intcomma }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

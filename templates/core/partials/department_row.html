@@ -1,0 +1,19 @@
+<tr id="department-{{ department.pk }}" class="{% if not department.is_active or not department.company.is_active %}opacity-60{% endif %}">
+  <td class="font-bold">{{ department.name }}</td>
+  <td>{{ department.company.name }}</td>
+  <td>
+    {% if department.is_active %}<span class="badge badge-soft badge-success">Active</span>
+    {% else %}<span class="badge badge-soft">Inactive</span>{% endif %}
+  </td>
+  <td class="text-right">
+    <a href="{% url 'core:department_edit' department.pk %}" class="btn btn-sm btn-outline btn-primary">Edit</a>
+    <span class="tooltip tooltip-left" data-tip="{% if department.is_active %}Stops it being offered for new users. Users already in it keep it.{% else %}Offers this department again.{% endif %}">
+      <button class="btn btn-sm {% if department.is_active %}btn-outline btn-warning{% else %}btn-success{% endif %}"
+              hx-post="{% url 'core:department_toggle' department.pk %}"
+              hx-target="#department-{{ department.pk }}" hx-swap="outerHTML"
+              hx-confirm="{% if department.is_active %}Deactivate department {{ department.name }}?{% else %}Activate department {{ department.name }} again?{% endif %}">
+        {% if department.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </span>
+  </td>
+</tr>

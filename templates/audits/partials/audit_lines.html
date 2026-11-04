@@ -1,0 +1,35 @@
+{% load humanize %}
+<div id="audit-lines">
+  {% if page.paginator.count %}
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm table-zebra data-table" data-table="audit-lines" data-filter="off" data-csv-tip="Download the lines on this page">
+        <thead><tr><th>Item No</th><th>Description</th><th>UoM</th><th class="text-right">ERP Qty</th><th class="text-right">Rate p.u.</th><th class="text-right">ERP value</th></tr></thead>
+        <tbody>
+          {% for line in page %}
+            <tr>
+              <td class="font-bold">{{ line.item_code }}</td>
+              <td>{{ line.description }}</td>
+              <td>{{ line.uom }}</td>
+              <td class="text-right {% if line.erp_qty < 0 %}text-error font-bold{% endif %}">{{ line.erp_qty|floatformat:"-3" }}</td>
+              <td class="text-right">{{ line.rate|floatformat:2|intcomma }}</td>
+              <td class="text-right">{{ line.erp_value|floatformat:2|intcomma }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.paginator.num_pages > 1 %}
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span>Page {{ page.number }} of {{ page.paginator.num_pages }} · {{ page.paginator.count|intcomma }} lines</span>
+        <div class="join">
+          {% if page.has_previous %}<button class="join-item btn btn-sm" hx-get="?page={{ page.previous_page_number }}&q={{ q|urlencode }}" hx-target="#audit-lines" hx-swap="outerHTML">« Previous</button>{% endif %}
+          {% if page.has_next %}<button class="join-item btn btn-sm" hx-get="?page={{ page.next_page_number }}&q={{ q|urlencode }}" hx-target="#audit-lines" hx-swap="outerHTML">Next »</button>{% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% elif q %}
+    <div role="alert" class="alert alert-soft alert-info"><span>No line matches “{{ q }}”.</span></div>
+  {% else %}
+    <div role="alert" class="alert alert-soft alert-info"><span>No ERP lines yet.</span></div>
+  {% endif %}
+</div>

@@ -1,0 +1,35 @@
+[project]
+name = "stock-audit"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "argon2-cffi>=25.1.0",
+    "django>=5.2,<5.3",
+    "openpyxl>=3.1.5",
+    "pillow>=13.0.0",
+    "python-dotenv>=1.2.4",
+    "whitenoise>=6.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-django>=4.14.0",
+    "ruff>=0.17.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# RUF012 misfires on Django's Meta / form class attributes.
+extend-ignore = ["RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"config/settings/*.py" = ["F403", "F405"]

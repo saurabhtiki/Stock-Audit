@@ -1,0 +1,11 @@
+{# Round photo, or the first letter of the name when there is no photo. Usage: include with person=user size="w-10" #}
+<div class="avatar{% if not person.photo %} avatar-placeholder{% endif %}">
+  <div class="{{ size|default:'w-10' }} rounded-full {% if not person.photo %}bg-secondary text-secondary-content{% endif %}">
+    {% if person.photo %}
+      <img src="{{ person.photo.url }}" alt="Photo of {{ person.full_name }}">
+    {% else %}
+      {# The letter is drawn by CSS so it never ends up in a CSV download. #}
+      <span class="avatar-initial" aria-hidden="true" data-initial="{{ person.full_name|default:person.username|slice:":1"|upper }}"></span>
+    {% endif %}
+  </div>
+</div>

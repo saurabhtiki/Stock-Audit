@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Tolerance & freeze{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-2xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Tolerance &amp; freeze</li></ul></div>
+  <h1 class="mb-4 text-2xl font-bold">Tolerance &amp; freeze ERP stock</h1>
+
+  <div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
+    <div class="stat"><div class="stat-title">Lines</div><div class="stat-value text-2xl">{{ summary.count|intcomma }}</div></div>
+    <div class="stat"><div class="stat-title">Total ERP value</div><div class="stat-value text-2xl">{{ summary.value|default:0|floatformat:2|intcomma }}</div></div>
+    <div class="stat"><div class="stat-title">Negative qty lines</div><div class="stat-value text-2xl {% if summary.negative %}text-warning{% endif %}">{{ summary.negative|intcomma }}</div></div>
+    <div class="stat"><div class="stat-title">New items</div><div class="stat-value text-2xl">{{ summary.new_items|intcomma }}</div><div class="stat-desc">Not reviewed yet</div></div>
+  </div>
+
+  <div class="card bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <p class="text-sm text-base-content/70">
+        After counting, a line is flagged if its difference is more than <strong>either</strong> tolerance.
+        Example: ERP Qty 100, qty tolerance 2, % tolerance 5 → a count of 97 (difference 3) is flagged by quantity.
+      </p>
+      <div class="grid gap-x-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.qty_tolerance %}
+        {% include "partials/field.html" with field=form.pct_tolerance %}
+      </div>
+      <div role="alert" class="alert alert-soft alert-warning mt-2">
+        <label class="label cursor-pointer items-start gap-2 whitespace-normal text-base-content">
+          <input type="checkbox" name="confirm" class="checkbox checkbox-warning" {% if form.confirm.value %}checked{% endif %}>
+          <span>{{ form.confirm.label }}</span>
+        </label>
+      </div>
+      {% for error in form.confirm.errors %}<p class="text-error">{{ error }}</p>{% endfor %}
+      <div class="mt-2 flex gap-2">
+        <button type="submit" class="btn btn-warning">Freeze ERP stock</button>
+        <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-ghost">Back</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

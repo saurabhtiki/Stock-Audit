@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Audits{% endblock %}
+{% block content %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-bold">Audits</h1>
+  <div class="flex flex-wrap gap-2">
+    <span class="tooltip tooltip-bottom" data-tip="Excel file with the 5 columns to copy your ERP report into">
+      <a href="{% url 'audits:erp_template' %}" class="btn btn-outline btn-secondary">ERP template</a>
+    </span>
+    {% if can_create %}<a href="{% url 'audits:audit_create' %}" class="btn btn-primary">New audit</a>{% endif %}
+  </div>
+</div>
+
+<form method="get" class="mb-4 flex flex-wrap items-end gap-2 rounded-box bg-base-100 p-3">
+  <label class="tooltip" data-tip="Show audits of one Branch">
+    <span class="sr-only">Branch</span>
+    <select name="branch" class="select select-sm w-44">
+      <option value="">All Branches</option>
+      {% for branch in branches %}<option value="{{ branch.pk }}" {% if filters.branch == branch.pk|stringformat:"s" %}selected{% endif %}>{{ branch }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="tooltip" data-tip="Show audits at one stage">
+    <span class="sr-only">Stage</span>
+    <select name="stage" class="select select-sm w-36">
+      <option value="">All stages</option>
+      {% for value, label in stages %}<option value="{{ value }}" {% if filters.stage == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="tooltip" data-tip="Scheduled or Surprise">
+    <span class="sr-only">Type</span>
+    <select name="type" class="select select-sm w-32">
+      <option value="">All types</option>
+      {% for value, label in types %}<option value="{{ value }}" {% if filters.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="tooltip" data-tip="Audit date from">
+    <span class="sr-only">From</span><input type="date" name="from" value="{{ filters.from }}" class="input input-sm w-36">
+  </label>
+  <label class="tooltip" data-tip="Audit date to">
+    <span class="sr-only">To</span><input type="date" name="to" value="{{ filters.to }}" class="input input-sm w-36">
+  </label>
+  <button class="btn btn-sm btn-primary">Filter</button>
+  <a href="{% url 'audits:audit_list' %}" class="btn btn-sm btn-ghost">Clear</a>
+</form>
+
+{% if audits %}
+  <div class="overflow-x-auto rounded-box bg-base-100">
+    <table class="table table-zebra data-table" data-table="audits">
+      <thead><tr><th>Title</th><th>Branch</th><th>Audit date</th><th>Type</th><th>Stage</th><th class="text-right">Lines</th><th class="text-right">ERP value</th></tr></thead>
+      <tbody>
+        {% for audit in audits %}
+          <tr class="{% if audit.stage == 'cancelled' %}opacity-60{% endif %}">
+            <td><a class="link link-primary font-bold" href="{% url 'audits:audit_detail' audit.pk %}">{{ audit.title }}</a></td>
+            <td>{{ audit.branch }}</td>
+            <td data-sort="{{ audit.audit_date|date:'Y-m-d' }}">{{ audit.audit_date|date:"d M Y" }}</td>
+            <td>{{ audit.get_audit_type_display }}</td>
+            <td>{% include "audits/partials/stage_badge.html" %}</td>
+            <td class="text-right" data-sort="{{ audit.line_count }}">{{ audit.line_count|intcomma }}</td>
+            <td class="text-right" data-sort="{{ audit.total_value|default:0 }}">{{ audit.total_value|default:0|floatformat:2|intcomma }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div role="alert" class="alert alert-soft alert-info"><span>No audits found.{% if can_create %} Use “New audit” to create one.{% endif %}</span></div>
+{% endif %}
+{% endblock %}

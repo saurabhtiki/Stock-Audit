@@ -1,0 +1,38 @@
+{% load static %}<!doctype html>
+<html lang="en" data-theme="stockaudit">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %} · {{ app_name }}</title>
+  <script src="{% static 'js/theme.js' %}"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.43/daisyui.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <script defer src="{% static 'js/table_tools.js' %}"></script>
+  <script defer src="{% static 'js/menus.js' %}"></script>
+  <link href="{% static 'css/app.css' %}" rel="stylesheet">
+</head>
+<body class="min-h-screen bg-base-200" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% if user.is_authenticated %}
+    {% include "partials/navbar.html" %}
+  {% else %}
+    <div class="flex justify-end p-3">{% include "partials/theme_toggle.html" %}</div>
+  {% endif %}
+
+  <main class="mx-auto max-w-6xl p-4 sm:p-6">
+    {% if messages %}
+      <div class="mb-4 space-y-2" id="messages">
+        {% for message in messages %}
+          <div role="alert" class="alert alert-soft {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}">
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

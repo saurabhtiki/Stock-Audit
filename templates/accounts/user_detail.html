@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ person.username }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs text-sm"><ul><li><a href="{% url 'accounts:user_list' %}">Users</a></li><li>{{ person.username }}</li></ul></div>
+
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <div>
+    <div class="flex items-center gap-3">
+    {% include "partials/avatar.html" with person=person size="w-14" %}
+    <div>
+    <h1 class="text-2xl font-bold">{{ person.full_name }}</h1>
+    <p class="text-base-content/60">{{ person.username }}
+      {% if not person.is_active %}<span class="badge badge-soft">Deactivated</span>{% endif %}
+      {% if person.is_login_locked %}<span class="badge badge-soft badge-warning">Locked after wrong passwords</span>{% endif %}
+    </p>
+    </div>
+    </div>
+  </div>
+  {% if person != user %}
+    <form method="post" action="{% url 'accounts:user_toggle' person.pk %}"
+          onsubmit="return confirm('{% if person.is_active %}Deactivate {{ person.username|escapejs }}? They will not be able to log in.{% else %}Activate {{ person.username|escapejs }} again?{% endif %}')">
+      {% csrf_token %}
+      <span class="tooltip tooltip-left" data-tip="Users are never deleted, only switched off.">
+        <button class="btn {% if person.is_active %}btn-error btn-outline{% else %}btn-success{% endif %}">{% if person.is_active %}Deactivate user{% else %}Activate user{% endif %}</button>
+      </span>
+    </form>
+  {% endif %}
+</div>
+
+<div class="grid gap-4 lg:grid-cols-3">
+  <section class="card bg-base-100 lg:col-span-2">
+    <div class="card-body">
+      <h2 class="card-title">Companies and rights</h2>
+      {% if person.is_admin %}
+        <div role="alert" class="alert alert-soft alert-info"><span>Admin has every right in every company. No ticks needed.</span></div>
+      {% endif %}
+
+      {% if memberships %}
+        <div class="overflow-x-auto">
+          <table class="table table-zebra data-table">
+            <thead><tr><th>Company</th><th>Role</th><th>Department</th><th>Access</th><th></th></tr></thead>
+            <tbody>
+              {% for m in memberships %}
+                <tr class="{% if not m.is_active or not m.company.is_active %}opacity-60{% endif %}">
+                  <td class="font-bold">{{ m.company.name }}{% if not m.company.is_active %} <span class="badge badge-soft badge-sm">company inactive</span>{% endif %}</td>
+                  <td>
+                    <form method="post" action="{% url 'accounts:membership_role' m.pk %}" class="tooltip" data-tip="Role only sets the starting ticks. Changing it keeps the saved ticks.">
+                      {% csrf_token %}
+                      <select name="role" class="select select-sm" onchange="this.form.submit()" aria-label="Role in {{ m.company.name }}">
+                        {% for value, label in roles %}<option value="{{ value }}" {% if value == m.role %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                      </select>
+                    </form>
+                  </td>
+                  <td>
+                    <form method="post" action="{% url 'accounts:membership_department' m.pk %}" class="tooltip" data-tip="Pick from this company's departments. Add new ones under Admin → Departments.">
+                      {% csrf_token %}
+                      <select name="department" class="select select-sm" onchange="this.form.submit()" aria-label="Department in {{ m.company.name }}">
+                        <option value="">— None —</option>
+                        {% for dept in m.department_choices %}<option value="{{ dept.pk }}" {% if dept.pk == m.department_id %}selected{% endif %}>{{ dept.name }}{% if not dept.is_active %} (inactive){% endif %}</option>{% endfor %}
+                      </select>
+                    </form>
+                  </td>
+                  <td>
+                    <form method="post" action="{% url 'accounts:membership_toggle' m.pk %}">
+                      {% csrf_token %}
+                      <span class="tooltip" data-tip="{% if m.is_active %}Removes access to this company. Ticks are kept.{% else %}Gives access to this company again.{% endif %}">
+                        <button class="btn btn-sm btn-outline {% if m.is_active %}btn-warning{% else %}btn-success{% endif %}">{% if m.is_active %}Remove access{% else %}Give access{% endif %}</button>
+                      </span>
+                    </form>
+                  </td>
+                  <td class="text-right"><a class="btn btn-sm btn-primary" href="{% url 'accounts:rights_grid' m.pk %}">Branch rights</a></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% elif not person.is_admin %}
+        <p class="text-base-content/60">Not in any company yet. Add one below.</p>
+      {% endif %}
+
+      {% if membership_form.fields.company.queryset.exists %}
+        <form method="post" action="{% url 'accounts:membership_add' person.pk %}" class="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]" novalidate>
+          {% csrf_token %}
+          {% include "partials/field.html" with field=membership_form.company %}
+          {% include "partials/field.html" with field=membership_form.role %}
+          <button class="btn btn-secondary mb-1">Add to company</button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="space-y-4">
+    <section class="card bg-base-100">
+      <form method="post" class="card-body" novalidate>
+        {% csrf_token %}
+        <h2 class="card-title">Details</h2>
+        {% include "partials/field.html" with field=edit_form.full_name %}
+        {% include "partials/field.html" with field=edit_form.email %}
+        <label class="label cursor-pointer gap-3">
+          {{ edit_form.is_admin }}
+          <span class="tooltip" data-tip="{{ edit_form.is_admin.help_text }}">Group Admin</span>
+        </label>
+        {% for error in edit_form.is_admin.errors %}<p class="text-sm text-error">{{ error }}</p>{% endfor %}
+        <button class="btn btn-primary mt-2">Save details</button>
+      </form>
+    </section>
+
+    <section class="card bg-base-100">
+      <form method="post" action="{% url 'accounts:user_reset_password' person.pk %}" class="card-body" novalidate>
+        {% csrf_token %}
+        <h2 class="card-title">Reset password</h2>
+        <p class="text-sm text-base-content/60">Also unlocks the login. Tell the user the new password; they must change it when they log in.</p>
+        {% include "partials/field.html" with field=reset_form.temporary_password %}
+        <button class="btn btn-warning mt-2">Reset password</button>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}

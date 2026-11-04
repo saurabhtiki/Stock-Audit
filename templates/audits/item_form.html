@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Edit item{% else %}Add item{% endif %}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:item_list' %}">Items</a></li><li>{% if item %}{{ item.code }}{% else %}New{% endif %}</li></ul></div>
+  <div class="card bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <h1 class="text-xl font-bold">{% if item %}Edit item{% else %}Add item{% endif %}</h1>
+      {% include "partials/field.html" with field=form.code %}
+      {% include "partials/field.html" with field=form.description %}
+      {% include "partials/field.html" with field=form.uom %}
+      <div class="mt-2 flex gap-2">
+        <button type="submit" class="btn btn-primary">Save item</button>
+        <a href="{% url 'audits:item_list' %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

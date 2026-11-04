@@ -1,0 +1,29 @@
+<tr id="company-{{ company.pk }}" class="{% if not company.is_active %}opacity-60{% endif %}">
+  <td>
+    <div class="flex items-center gap-3">
+      {% if company.logo %}
+        <img src="{{ company.logo.url }}" alt="" class="h-8 w-8 rounded object-contain">
+      {% endif %}
+      <div>
+        <div class="font-bold">{{ company.name }}</div>
+        <div class="text-sm text-base-content/60">{{ company.address|truncatechars:60 }}</div>
+      </div>
+    </div>
+  </td>
+  <td><a class="link" href="{% url 'core:branch_list' %}?company={{ company.pk }}" title="See this company's Branches">{{ company.branch_count }}</a></td>
+  <td>
+    {% if company.is_active %}<span class="badge badge-soft badge-success">Active</span>
+    {% else %}<span class="badge badge-soft">Inactive</span>{% endif %}
+  </td>
+  <td class="text-right">
+    <a href="{% url 'core:company_edit' company.pk %}" class="btn btn-sm btn-outline btn-primary">Edit</a>
+    <span class="tooltip tooltip-left" data-tip="{% if company.is_active %}Hides its Branches and blocks users' access. Nothing is deleted.{% else %}Turns the company and its Branches back on.{% endif %}">
+      <button class="btn btn-sm {% if company.is_active %}btn-outline btn-warning{% else %}btn-success{% endif %}"
+              hx-post="{% url 'core:company_toggle' company.pk %}"
+              hx-target="#company-{{ company.pk }}" hx-swap="outerHTML"
+              hx-confirm="{% if company.is_active %}Deactivate {{ company.name }}? Its users will lose access to it.{% else %}Activate {{ company.name }} again?{% endif %}">
+        {% if company.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </span>
+  </td>
+</tr>

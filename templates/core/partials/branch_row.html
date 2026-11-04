@@ -1,0 +1,22 @@
+<tr id="branch-{{ branch.pk }}" class="{% if not branch.is_usable %}opacity-60{% endif %}">
+  <td class="font-bold">{{ branch.code }}</td>
+  <td>{{ branch.name }}</td>
+  <td>{{ branch.company.name }}</td>
+  <td>
+    {% if branch.is_usable %}<span class="badge badge-soft badge-success">Active</span>
+    {% elif not branch.company.is_active %}
+      <span class="tooltip" data-tip="The company is inactive, so this Branch is off too."><span class="badge badge-soft">Company inactive</span></span>
+    {% else %}<span class="badge badge-soft">Inactive</span>{% endif %}
+  </td>
+  <td class="text-right">
+    <a href="{% url 'core:branch_edit' branch.pk %}" class="btn btn-sm btn-outline btn-primary">Edit</a>
+    <span class="tooltip tooltip-left" data-tip="{% if branch.is_active %}Hides this Branch from all users. Nothing is deleted.{% else %}Turns this Branch back on.{% endif %}">
+      <button class="btn btn-sm {% if branch.is_active %}btn-outline btn-warning{% else %}btn-success{% endif %}"
+              hx-post="{% url 'core:branch_toggle' branch.pk %}"
+              hx-target="#branch-{{ branch.pk }}" hx-swap="outerHTML"
+              hx-confirm="{% if branch.is_active %}Deactivate Branch {{ branch.code }}?{% else %}Activate Branch {{ branch.code }} again?{% endif %}">
+        {% if branch.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </span>
+  </td>
+</tr>

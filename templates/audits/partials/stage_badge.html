@@ -1,0 +1,6 @@
+{# Coloured badge for an audit stage. Needs `audit` in the context. #}
+{% if audit.stage == "erp_draft" %}<span class="tooltip" data-tip="ERP file can still be uploaded or replaced."><span class="badge badge-soft badge-info">ERP Draft</span></span>
+{% elif audit.stage == "erp_frozen" %}<span class="tooltip" data-tip="ERP lines and tolerance are locked. Counting can start."><span class="badge badge-soft badge-primary">ERP Frozen</span></span>
+{% elif audit.stage == "checking_done" %}<span class="badge badge-soft badge-secondary">Checking Done</span>
+{% elif audit.stage == "locked" %}<span class="badge badge-soft badge-success">Locked</span>
+{% else %}<span class="tooltip" data-tip="Cancelled: kept for the record only."><span class="badge badge-soft badge-error">Cancelled</span></span>{% endif %}

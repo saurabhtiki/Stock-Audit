@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-bold">Users</h1>
+  <a href="{% url 'accounts:user_create' %}" class="btn btn-primary">Add user</a>
+</div>
+
+<label class="input mb-4 w-full sm:w-80" title="Search by username, name or email">
+  <span class="sr-only">Search users</span>
+  <input type="search" name="q" value="{{ search }}" placeholder="Search name, username or email"
+         hx-get="{% url 'accounts:user_list' %}" hx-trigger="input changed delay:300ms, search"
+         hx-target="#user-rows">
+</label>
+
+<div class="overflow-x-auto rounded-box bg-base-100">
+  <table class="table table-zebra data-table" data-table="users" data-filter="off">
+    <thead><tr><th>User</th><th>Companies, roles and departments</th><th>Status</th><th data-nosort data-csv-skip></th></tr></thead>
+    <tbody id="user-rows">{% include "accounts/partials/user_rows.html" %}</tbody>
+  </table>
+</div>
+{% endblock %}

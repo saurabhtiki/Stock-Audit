@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{% if department %}Edit department{% else %}Add department{% endif %}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'core:department_list' %}">Departments</a></li><li>{% if department %}{{ department.name }}{% else %}New{% endif %}</li></ul></div>
+  <div class="card bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <h1 class="text-xl font-bold">{% if department %}Edit department{% else %}Add department{% endif %}</h1>
+      {% include "partials/field.html" with field=form.company %}
+      {% include "partials/field.html" with field=form.name %}
+      <div class="mt-2 flex gap-2">
+        <button type="submit" class="btn btn-primary">Save department</button>
+        <a href="{% url 'core:department_list' %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

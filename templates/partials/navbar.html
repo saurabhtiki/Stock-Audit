@@ -1,0 +1,66 @@
+<header class="app-header">
+  <nav class="navbar mx-auto max-w-6xl gap-2 px-4">
+    <div class="navbar-start gap-2">
+      <a href="{% url 'core:home' %}" class="text-lg font-bold">{{ app_name }}</a>
+      {% if app_env != "production" %}
+        <span class="tooltip tooltip-bottom" data-tip="Not the live system. Data here is for {{ app_env }} only.">
+          <span class="badge badge-sm badge-warning">{{ app_env }}</span>
+        </span>
+      {% endif %}
+    </div>
+
+    <div class="navbar-center">
+      {% if user_companies|length > 1 %}
+        <form method="post" action="{% url 'core:switch_company' %}" class="tooltip tooltip-bottom" data-tip="Switch the company you are working in">
+          {% csrf_token %}
+          <label class="sr-only" for="company-switcher">Company</label>
+          <select id="company-switcher" name="company_id" class="select select-sm w-40 sm:w-56" onchange="this.form.submit()">
+            {% for company in user_companies %}
+              <option value="{{ company.pk }}" {% if company.pk == current_company.pk %}selected{% endif %}>{{ company.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      {% elif current_company %}
+        <span class="font-bold">{{ current_company.name }}</span>
+      {% endif %}
+    </div>
+
+    <div class="navbar-end gap-1">
+      {% if current_company %}
+        <a href="{% url 'audits:audit_list' %}" class="btn btn-ghost btn-sm" title="Audits of your Branches">Audits</a>
+        <a href="{% url 'audits:item_list' %}" class="btn btn-ghost btn-sm" title="Item list of this company">Items</a>
+      {% endif %}
+      {% if user.is_admin %}
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm">Admin</summary>
+          <ul class="menu dropdown-content z-10 mt-2 w-48 rounded-box bg-base-100 p-2 shadow">
+            <li><a href="{% url 'core:company_list' %}">Companies</a></li>
+            <li><a href="{% url 'core:branch_list' %}">Branches</a></li>
+            <li><a href="{% url 'core:department_list' %}">Departments</a></li>
+            <li><a href="{% url 'accounts:user_list' %}">Users</a></li>
+            <li><a href="{% url 'core:activity_log' %}">Activity log</a></li>
+          </ul>
+        </details>
+      {% endif %}
+      {% include "partials/theme_toggle.html" %}
+      <details class="dropdown dropdown-end">
+        <summary class="btn btn-ghost btn-sm gap-2">
+          {% include "partials/avatar.html" with person=user size="w-6" %}
+          {{ user.full_name|default:user.username }}
+        </summary>
+        <ul class="menu dropdown-content z-10 mt-2 w-52 rounded-box bg-base-100 p-2 shadow">
+          {% if current_role %}<li class="menu-title">{{ current_role }}{% if current_company %} in {{ current_company.name }}{% endif %}</li>{% endif %}
+          <li><a href="{% url 'accounts:profile' %}">My profile and photo</a></li>
+          <li><a href="{% url 'accounts:password_change' %}">Change password</a></li>
+          <li>
+            <form method="post" action="{% url 'accounts:logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="w-full text-left">Log out</button>
+            </form>
+          </li>
+        </ul>
+      </details>
+    </div>
+  </nav>
+  <div class="tape-stripe" aria-hidden="true"></div>
+</header>

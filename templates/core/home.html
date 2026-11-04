@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold">Hello, {{ user.full_name|default:user.username }}</h1>
+
+{% if not current_company %}
+  <div role="alert" class="alert alert-soft alert-info mt-4">
+    {% if user.is_admin %}
+      <span>No company yet. <a class="link" href="{% url 'core:company_create' %}">Add the first company</a> to get started.</span>
+    {% else %}
+      <span>You do not have access to any company yet. Please contact Admin.</span>
+    {% endif %}
+  </div>
+{% else %}
+  <p class="mt-1 text-base-content/70">
+    You are working in <strong>{{ current_company.name }}</strong> as <strong>{{ current_role }}</strong>.
+  </p>
+
+  <section class="mt-6">
+    <h2 class="mb-2 text-lg font-bold">Your Branches</h2>
+    {% if branches %}
+      <ul class="list rounded-box bg-base-100">
+        {% for branch in branches %}
+          <li class="list-row">
+            <span class="badge badge-ghost font-bold">{{ branch.code }}</span>
+            <span>{{ branch.name }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-info">
+        <span>No Branches are open to you in this company yet. Ask Admin to give you rights.</span>
+      </div>
+    {% endif %}
+  </section>
+  {% if branches %}<a href="{% url 'audits:audit_list' %}" class="btn btn-primary mt-6">Go to audits</a>{% endif %}
+{% endif %}
+{% endblock %}

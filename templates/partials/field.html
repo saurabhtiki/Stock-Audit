@@ -1,0 +1,13 @@
+{# One form field with label, help tooltip and error. Usage: {% include "partials/field.html" with field=form.name %} #}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    {{ field.label }}{% if field.field.required %} <span class="text-error" aria-hidden="true">*</span>{% endif %}
+    {% if field.help_text %}
+      <span class="tooltip tooltip-right font-normal" data-tip="{{ field.help_text }}">
+        <span class="badge badge-xs badge-ghost cursor-help" aria-label="{{ field.help_text }}">?</span>
+      </span>
+    {% endif %}
+  </legend>
+  {{ field }}
+  {% for error in field.errors %}<p class="label text-error">{{ error }}</p>{% endfor %}
+</fieldset>

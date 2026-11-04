@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="mx-auto mt-10 max-w-sm sm:mt-20">
+  <div class="tape-stripe rounded-t-box" aria-hidden="true"></div>
+  <div class="card rounded-t-none bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <h1 class="text-2xl font-bold text-primary">{{ app_name }}</h1>
+      <p class="text-base-content/70">Log in with the username Admin gave you.</p>
+
+      {% for error in form.non_field_errors %}
+        <div role="alert" class="alert alert-soft alert-error"><span>{{ error }}</span></div>
+      {% endfor %}
+
+      {% include "partials/field.html" with field=form.username %}
+      {% include "partials/field.html" with field=form.password %}
+
+      <button type="submit" class="btn btn-primary mt-2">Log in</button>
+      <p class="text-sm text-base-content/60">Forgot your password? Ask Admin to reset it.</p>
+    </form>
+  </div>
+</div>
+{% endblock %}

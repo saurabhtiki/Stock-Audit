@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Rights · {{ person.username }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs text-sm"><ul>
+  <li><a href="{% url 'accounts:user_list' %}">Users</a></li>
+  <li><a href="{% url 'accounts:user_detail' person.pk %}">{{ person.username }}</a></li>
+  <li>Rights in {{ company.name }}</li>
+</ul></div>
+
+<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-bold">{{ person.full_name }} in {{ company.name }}</h1>
+    <p class="text-base-content/60">Role: <strong>{{ membership.get_role_display }}</strong>. Tick what this user may do in each Branch. A Branch with no ticks is hidden from them.</p>
+  </div>
+
+  {% if copy_candidates %}
+    <form method="post" action="{% url 'accounts:rights_copy' membership.pk %}" class="flex items-end gap-2"
+          onsubmit="return confirm('Replace all ticks below with the chosen user\'s ticks in {{ company.name|escapejs }}?')">
+      {% csrf_token %}
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Copy rights from
+          <span class="tooltip tooltip-left font-normal" data-tip="Copies another user's ticks in this company only. Other companies are not touched.">
+            <span class="badge badge-xs badge-ghost cursor-help">?</span>
+          </span>
+        </legend>
+        <select name="source_user" class="select select-sm" required>
+          <option value="">Pick a user…</option>
+          {% for other in copy_candidates %}<option value="{{ other.pk }}">{{ other.full_name }} ({{ other.username }})</option>{% endfor %}
+        </select>
+      </fieldset>
+      <button class="btn btn-sm btn-secondary mb-1">Copy</button>
+    </form>
+  {% endif %}
+</div>
+
+{% if not rows %}
+  <div role="alert" class="alert alert-soft alert-info">
+    <span>{{ company.name }} has no Branches yet. <a class="link" href="{% url 'core:branch_create' %}?company={{ company.pk }}">Add a Branch</a> first.</span>
+  </div>
+{% else %}
+<form method="post" x-data="rightsGrid()">
+  {% csrf_token %}
+  <div class="overflow-x-auto rounded-box bg-base-100">
+    <table class="table table-pin-cols">
+      <thead>
+        <tr>
+          <th>Branch</th>
+          {% for name, label, tip in rights %}
+            <td class="text-center"><span class="tooltip tooltip-bottom" data-tip="{{ tip }}">{{ label }}</span></td>
+          {% endfor %}
+          <td></td>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr data-branch="{{ row.branch.pk }}" class="{% if not row.branch.is_active %}opacity-60{% endif %}">
+            <th class="bg-base-100">
+              <div class="font-bold">{{ row.branch.code }}</div>
+              <div class="text-xs font-normal text-base-content/60">{{ row.branch.name }}</div>
+              {% if not row.is_saved %}<span class="tooltip tooltip-right" data-tip="These are the role's starting ticks. Press Save to apply them."><span class="badge badge-xs badge-warning">not saved</span></span>{% endif %}
+              {% if not row.branch.is_active %}<span class="badge badge-xs badge-soft">inactive</span>{% endif %}
+            </th>
+            {% for name, label, tip in rights %}
+              <td class="text-center">
+                <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" name="r_{{ row.branch.pk }}_{{ name }}"
+                       aria-label="{{ label }} in {{ row.branch.code }}" {% if name in row.ticked %}checked{% endif %}>
+              </td>
+            {% endfor %}
+            <td>
+              <span class="tooltip tooltip-left" data-tip="Copy this row's ticks to every Branch of {{ company.name }}">
+                <button type="button" class="btn btn-xs btn-outline btn-secondary" @click="applyToAll($el)">Apply to all</button>
+              </span>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="sticky bottom-0 mt-4 flex gap-2 bg-base-200 py-3">
+    <button type="submit" class="btn btn-primary">Save rights</button>
+    <a href="{% url 'accounts:user_detail' person.pk %}" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+
+<script>
+  function rightsGrid() {
+    return {
+      applyToAll(button) {
+        const sourceRow = button.closest("tr");
+        const ticks = [...sourceRow.querySelectorAll("input[type=checkbox]")].map((box) => box.checked);
+        this.$root.querySelectorAll("tbody tr").forEach((row) => {
+          row.querySelectorAll("input[type=checkbox]").forEach((box, index) => { box.checked = ticks[index]; });
+        });
+      },
+    };
+  }
+</script>
+{% endif %}
+{% endblock %}
