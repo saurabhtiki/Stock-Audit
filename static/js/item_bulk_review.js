@@ -5,16 +5,17 @@ document.addEventListener("alpine:init", () => {
     picked: [], // ids ticked by hand
     allMatching: false, // "select all N matching" is on
     excluded: [], // ids unticked while allMatching is on
-    matching: 0, // New items matching the current search/filter (from the server)
-    filterQ: "",
-    filterShow: "",
+    matching: 0, // New items matching the current search/filters (from the server)
+    filters: "", // the list's search and column filters, e.g. "q=rm&uom=KG"
+    filtered: false, // any search or filter on
     busy: false,
 
-    // Called by #item-table every time it is (re)loaded.
+    // Called by #item-table every time it is (re)loaded. New filters = start the ticking again.
     tableLoaded(table) {
+      if ((table.dataset.filters || "") !== this.filters) this.reset();
       this.matching = Number(table.dataset.matching || 0);
-      this.filterQ = table.dataset.q || "";
-      this.filterShow = table.dataset.show || "";
+      this.filters = table.dataset.filters || "";
+      this.filtered = table.dataset.filtered !== "0";
     },
     reset() {
       this.picked = [];
@@ -48,7 +49,7 @@ document.addEventListener("alpine:init", () => {
       return `${this.plural(this.count)} ticked`;
     },
     selectAllText() {
-      const filter = this.filterQ ? ` matching “${this.filterQ}”` : "";
+      const filter = this.filtered ? " matching your filters" : "";
       return `Select all ${this.plural(this.matching)}${filter}`;
     },
     confirmText() {

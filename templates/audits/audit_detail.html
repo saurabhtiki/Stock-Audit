@@ -60,15 +60,7 @@
 {% endif %}
 
 <section class="mb-6">
-  <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-    <h2 class="text-lg font-bold">ERP lines</h2>
-    <span class="tooltip tooltip-left" data-tip="Search by item code or description">
-      <input type="search" name="q" value="{{ q }}" placeholder="Search item code or description" aria-label="Search lines"
-             class="input input-sm w-64"
-             hx-get="{% url 'audits:audit_detail' audit.pk %}" hx-trigger="input changed delay:300ms, search"
-             hx-target="#audit-lines" hx-swap="outerHTML">
-    </span>
-  </div>
+  <h2 class="mb-2 text-lg font-bold">ERP lines</h2>
   {% include "audits/partials/audit_lines.html" %}
 </section>
 

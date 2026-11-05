@@ -1,0 +1,59 @@
+{% comment %}
+  The <th> cells for the table's columns: click the name to sort, the funnel to filter. Needs `table`.
+  Pass lead_column=True when a narrow column (e.g. tick boxes, class dt-lead) comes first.
+{% endcomment %}
+{% for cell in table.header %}{% with column=cell.column %}
+  <th class="{% if forloop.first %}dt-sticky{% if lead_column %} dt-after-lead{% endif %}{% endif %}{% if column.align_right %} text-right{% endif %}" aria-sort="{{ cell.sort_state }}">
+    <div class="inline-flex items-center gap-1" x-data="dtPopup" @click.outside="close()" @keydown.escape.window="close()" @resize.window="open && place()" @scroll.window.capture="open && place()">
+      {% if column.sortable %}
+        <a href="{{ cell.sort_url }}" hx-get="{{ cell.sort_url }}" hx-push-url="true" class="sort-button" title="{{ cell.sort_tip }}">{{ column.label }}</a>
+      {% else %}{{ column.label }}{% endif %}
+      {% if column.filterable %}
+        <button type="button" x-ref="button" @click="toggle()" :aria-expanded="open" class="dt-funnel{% if cell.is_filtered %} is-on{% endif %}"
+                title="{% if cell.is_filtered %}{{ column.label }} is filtered. Click to change it.{% else %}Filter {{ column.label }}{% endif %}" aria-label="Filter {{ column.label }}">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="{% if cell.is_filtered %}currentColor{% else %}none{% endif %}" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg>
+        </button>
+        <div x-ref="panel" x-show="open" x-cloak :style="style" class="dt-panel card card-sm bg-base-100 text-base-content shadow-xl" role="dialog" aria-label="Filter {{ column.label }}">
+          <form class="card-body gap-2" hx-get="{{ table.base_url }}" hx-push-url="true">
+            {% for name, value in cell.hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+            <p class="font-bold">{{ column.label }}</p>
+            {% if column.type == "text" %}
+              <input type="search" name="{{ column.name }}" value="{{ cell.value }}" class="input input-sm w-full" placeholder="Contains…" title="Show rows whose {{ column.label }} contains these letters (any case). Press Enter or Apply." autocomplete="off">
+            {% elif column.type == "choice" %}
+              <div x-data="dtChoice" class="flex flex-col gap-2">
+                <input type="search" x-model="search" @keydown.enter.prevent class="input input-sm w-full" placeholder="Find a value…" aria-label="Find a value in the list" title="Type to shorten the list below">
+                <div class="flex gap-3 text-sm">
+                  <button type="button" class="link link-primary" @click="setAll(true)" title="Tick every value shown in the list">Select all</button>
+                  <button type="button" class="link" @click="setAll(false)" title="Untick every value shown in the list">Clear</button>
+                </div>
+                <div class="flex max-h-60 flex-col gap-1 overflow-y-auto">
+                  {% for option in cell.options %}
+                    <label class="flex cursor-pointer items-center gap-2 text-sm" x-show="matches($el.dataset.label)" data-label="{{ option.label }}">
+                      <input type="checkbox" class="checkbox checkbox-sm" name="{{ column.name }}" value="{{ option.value }}"{% if option.checked %} checked{% endif %}>
+                      <span class="flex-1{% if option.value == '__blank__' %} italic{% endif %}">{{ option.label }}</span>
+                      <span class="text-base-content/60" title="Rows that show if you tick only this">({{ option.count }})</span>
+                    </label>
+                  {% empty %}<p class="text-sm text-base-content/60">No values.</p>{% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <div class="grid grid-cols-2 gap-2">
+                <label class="flex flex-col gap-1 text-sm">From
+                  <input type="{% if column.type == 'date' %}date{% else %}number{% endif %}" step="any" name="{{ column.name }}_min" value="{{ cell.min }}" class="input input-sm" title="Leave empty for no lower limit">
+                </label>
+                <label class="flex flex-col gap-1 text-sm">To
+                  <input type="{% if column.type == 'date' %}date{% else %}number{% endif %}" step="any" name="{{ column.name }}_max" value="{{ cell.max }}" class="input input-sm" title="Leave empty for no upper limit">
+                </label>
+              </div>
+              <p class="text-xs text-base-content/60">Fill one box only for “from” or “up to”.</p>
+            {% endif %}
+            <div class="mt-1 flex justify-end gap-2">
+              {% if cell.is_filtered %}<a href="{{ cell.clear_url }}" hx-get="{{ cell.clear_url }}" hx-push-url="true" class="btn btn-sm btn-ghost" title="Remove the {{ column.label }} filter">Remove</a>{% endif %}
+              <button type="submit" class="btn btn-sm btn-primary" title="Show only the rows that pass this filter">Apply</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </th>
+{% endwith %}{% endfor %}

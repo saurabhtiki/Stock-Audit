@@ -190,3 +190,53 @@ Small fixes the user asked for after trying Phase 2. Confirmed in chat (grilled 
 ### Left for later (from code review)
 - Bulk review writes one log row per item (fine for hundreds; batch it if thousands become common).
 - Refreshing the error page asks to resend the old file (nothing is saved, so harmless).
+
+---
+
+## Phase 2.2 — Reusable table component (DONE — 116 tests pass)
+
+One table component for the whole app: sort, a filter on each column, CSV download and pages.
+Confirmed in chat (grilled point by point).
+
+### Decisions (from grilling)
+| # | Decision |
+|---|---|
+| 1 | **Everything runs on the server** (Django), for every table. Each click asks for fresh rows (~0.1–0.3 sec), and this works the same for 50 or 50,000 rows. The quick search box waits ~0.3 sec after typing stops; a column pop-up applies on Enter or **Apply**. |
+| 2 | **Column types are set in code**: `text`, `choice`, `number`, `date`. No guessing from the data. |
+| 3 | **A funnel icon on each column header** opens a small pop-up for that column. Text = "contains" (ignores case). Choice = tick list. Number / date = from–to range. |
+| 4 | **Tick list**: search box at the top, Select all / Clear, a count next to each value, e.g. `KG (1,240)`, and a **(Blank)** option. Only columns marked `choice` get a tick list. |
+| 5 | **Range**: one end can be left empty. "Qty from 10" means ≥ 10. |
+| 6 | **Combining**: AND across columns, OR inside one tick list. E.g. UoM = KG **or** PCS, **and** Qty 10–50. |
+| 7 | **Active filters**: chips above the table (`UoM: KG, PCS ✕`), `3 filters on · Clear all`, and a filled funnel on filtered columns. |
+| 8 | **Sort**: one column at a time. Click for A→Z, again for Z→A, a third time for the normal order. Each table sets its own normal order (Items = item code, Activity log = newest first). |
+| 9 | **Pages**: 25 / 50 / 100 / 200 rows, **default 25**. `« 1 2 3 … 25 »` and "Showing 26–50 of 1,240". |
+| 10 | **URL keeps the state**, e.g. `?uom=KG,PCS&qty_min=10&sort=-erp_value&page=2`. Refresh, Back and shared links all work. |
+| 11 | **CSV = all rows that match the filters and sort**, across every page. The tooltip says so: *"Downloads all 1,240 rows that match your filters, not just this page."* Plain numbers (`12500.50`), dates as `2026-11-05`, streamed (no row limit, server doesn't freeze), protected against Excel formulas. |
+| 12 | **Items page keeps** its quick search box (searches all text columns) and its New / Active / Inactive buttons. They work together with the column filters. Ticking items for bulk review stays as it is. |
+| 13 | **On a phone**: the table scrolls sideways, the first column stays fixed, and pop-ups open full-width. |
+| 14 | **Our own small component**, no new packages (not django-tables2 / django-filter). |
+| 15 | **First tables to move**: Items and Audit lines. Other screens keep `table_tools.js` until a later step. |
+
+### What gets built
+1. `core/datatable.py`: `Column(name, label, type, choices=None, sortable=True, filterable=True, csv=True, align_right=False)` and a `DataTable` class. You give it a queryset and columns. It reads the URL, then filters, sorts, makes pages, counts the tick-list values and streams the CSV.
+2. `templates/partials/datatable.html` (+ header / filter pop-up / pager partials): DaisyUI table, funnel dropdowns, chips, page-size select and pager. Everything reloads with HTMX (`hx-get`, `hx-push-url`), and Alpine.js handles the pop-ups.
+3. Tooltips on every control (funnel, sort, page size, CSV, Clear all).
+4. Items list and Audit lines (audit detail) moved onto the component. Each gets a `?export=csv` link.
+   Items' old `show=` select became the shortcut buttons All / New / Active / Inactive (they set the Status filter,
+   e.g. `?status=new`). "Select all N matching" for bulk review now sends the full filter string.
+5. Files: `core/datatable.py`, `templates/partials/datatable/{toolbar,head_cells,pager}.html`,
+   `static/js/datatable.js`, tests in `tests/test_datatable.py`.
+
+### Not in this phase
+- Moving the other ~10 list screens (Companies, Branches, Users, Activity log…).
+- Sorting by several columns, showing / hiding columns, saved filters.
+
+### Tests
+- text "contains" ignores case; tick list with 2 values = OR; (Blank) finds empty values
+- number / date range with both ends, only "from", only "to"; a bad value (e.g. `qty_min=abc`) is ignored with a message, no crash
+- two filters together = AND; sort asc / desc / normal; unknown sort column ignored
+- page size 25 default, 100 allowed, 999 falls back to 25; a page past the end shows the last page
+- tick-list counts are right
+- CSV has every matching row (not just the page), plain numbers, ISO dates, formula guard, skips columns marked `csv=False`
+- Items: quick search + New/Active buttons + column filters work together; bulk review still works
+- another company's rows never show up, in the table or in the CSV

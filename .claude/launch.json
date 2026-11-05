@@ -4,8 +4,26 @@
     {
       "name": "django-dev",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "python", "manage.py", "runserver", "8000"],
+      "runtimeArgs": [
+        "run",
+        "python",
+        "manage.py",
+        "runserver",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "django-dev-8001",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "python",
+        "manage.py",
+        "runserver",
+        "8001"
+      ],
+      "port": 8001
     }
   ]
 }

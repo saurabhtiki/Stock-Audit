@@ -1,13 +1,13 @@
 <tr id="item-{{ item.pk }}" class="{% if not item.is_active %}opacity-60{% endif %}">
   {% if can_manage %}
-    <td>
+    <td class="dt-sticky dt-lead">
       {% if item.is_new %}
         <input type="checkbox" class="checkbox checkbox-sm" data-review-id="{{ item.pk }}" aria-label="Tick {{ item.code }}" title="Tick to mark several New items reviewed together"
                :checked="isTicked('{{ item.pk }}')" @change="tick('{{ item.pk }}', $el.checked)">
       {% endif %}
     </td>
   {% endif %}
-  <td class="font-bold">{{ item.code }}</td>
+  <td class="dt-sticky{% if can_manage %} dt-after-lead{% endif %} font-bold">{{ item.code }}</td>
   <td>{{ item.description }}</td>
   <td>{{ item.uom }}</td>
   <td>

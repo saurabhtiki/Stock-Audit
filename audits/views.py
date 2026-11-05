@@ -1,15 +1,15 @@
 import logging
 from datetime import date
-from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q, Sum
-from django.http import HttpResponse
+from django.db.models import Case, CharField, Count, Q, Sum, Value, When
+from django.http import HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.cache import patch_vary_headers
+from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from accounts.access import visible_branches
@@ -27,17 +27,26 @@ from audits.permissions import (
     get_visible_audit,
 )
 from core.activity import diff, log_activity, snapshot
+from core.datatable import CHOICE, NUMBER, Column, DataTable
 
 logger = logging.getLogger(__name__)
 
 AUDIT_FIELDS = ["branch", "title", "audit_date", "audit_type", "stock_as_on"]
 ITEM_FIELDS = ["code", "description", "uom", "is_active", "is_new"]
-LINES_PER_PAGE = 50
-ITEMS_PER_PAGE = 50
 
 
 def _is_htmx(request) -> bool:
-    return request.headers.get("HX-Request") == "true"
+    # A history restore (Back button, page not in htmx's cache) needs the whole page.
+    return (
+        request.headers.get("HX-Request") == "true"
+        and request.headers.get("HX-History-Restore-Request") != "true"
+    )
+
+
+def _vary_on_htmx(response):
+    """The same URL gives the whole page or only the table, so caches must keep both apart."""
+    patch_vary_headers(response, ["HX-Request"])
+    return response
 
 
 # ---------- Audit list / create / edit ----------
@@ -119,38 +128,57 @@ def audit_edit(request, pk):
 # ---------- Audit page ----------
 
 
-def _lines_page(request, audit):
-    lines = audit.lines.all()
-    query = request.GET.get("q", "").strip()
-    if query:
-        lines = lines.filter(Q(item_code__icontains=query) | Q(description__icontains=query))
-    return Paginator(lines, LINES_PER_PAGE).get_page(request.GET.get("page")), query
+LINE_COLUMNS = [
+    Column("item_code", "Item No"),
+    Column("description", "Description"),
+    Column("uom", "UoM", type=CHOICE),
+    Column("erp_qty", "ERP Qty", type=NUMBER),
+    Column("rate", "Rate p.u.", type=NUMBER),
+    Column("erp_value", "ERP value", type=NUMBER),
+]
+
+
+def _lines_table(request, audit) -> DataTable:
+    return DataTable(
+        request.GET,
+        audit.lines.all(),
+        LINE_COLUMNS,
+        table_id="audit-lines",
+        default_sort=("pk",),
+        search_fields=("item_code", "description"),
+        search_placeholder="Search item code or description",
+        base_url=request.path,
+        noun="lines",
+    )
 
 
 def audit_detail(request, pk):
     audit = get_visible_audit(request, pk)
-    page, query = _lines_page(request, audit)
+    table = _lines_table(request, audit)
+    if table.wants_csv:
+        return table.csv_response(f"{audit.title}_erp_lines_{timezone.localdate().isoformat()}.csv")
     if _is_htmx(request):
-        return render(
-            request, "audits/partials/audit_lines.html", {"audit": audit, "page": page, "q": query}
+        return _vary_on_htmx(
+            render(request, "audits/partials/audit_lines.html", {"audit": audit, "table": table})
         )
     totals = audit.lines.aggregate(count=Count("id"), value=Sum("erp_value"))
     user = request.user
-    return render(
-        request,
-        "audits/audit_detail.html",
-        {
-            "audit": audit,
-            "page": page,
-            "q": query,
-            "totals": totals,
-            "uploads": audit.uploads.select_related("uploaded_by"),
-            "upload_form": UploadForm(),
-            "can_edit": can_edit_audit(user, audit),
-            "can_upload": can_upload(user, audit),
-            "can_freeze": can_freeze(user, audit) and totals["count"] > 0,
-            "can_cancel": can_cancel_audit(user, audit),
-        },
+    return _vary_on_htmx(
+        render(
+            request,
+            "audits/audit_detail.html",
+            {
+                "audit": audit,
+                "table": table,
+                "totals": totals,
+                "uploads": audit.uploads.select_related("uploaded_by"),
+                "upload_form": UploadForm(),
+                "can_edit": can_edit_audit(user, audit),
+                "can_upload": can_upload(user, audit),
+                "can_freeze": can_freeze(user, audit) and totals["count"] > 0,
+                "can_cancel": can_cancel_audit(user, audit),
+            },
+        )
     )
 
 
@@ -325,36 +353,60 @@ def audit_cancel(request, pk):
 # ---------- Items ----------
 
 
+ITEM_STATUS = Case(
+    When(is_active=False, then=Value("inactive")),
+    When(is_new=True, then=Value("new")),
+    default=Value("active"),
+    output_field=CharField(),
+)
+ITEM_STATUS_LABELS = {"new": "New (not reviewed)", "active": "Active", "inactive": "Inactive"}
+ITEM_COLUMNS = [
+    Column("code", "Item code"),
+    Column("description", "Description"),
+    Column("uom", "UoM", type=CHOICE),
+    Column("status", "Status", type=CHOICE, choices=ITEM_STATUS_LABELS),
+]
+ITEM_SHORTCUTS = [
+    ("All", "status", "", "Show every item"),
+    ("New", "status", "new", "Items added from an ERP upload and not reviewed yet"),
+    ("Active", "status", "active", "Reviewed items in use"),
+    ("Inactive", "status", "inactive", "Items turned off; nothing is deleted"),
+]
+
+
+def _item_table(company, params, base_url="") -> DataTable:
+    return DataTable(
+        params,
+        Item.objects.filter(company=company).annotate(status=ITEM_STATUS),
+        ITEM_COLUMNS,
+        table_id="item-table",
+        default_sort=("code",),
+        search_fields=("code", "description"),
+        search_placeholder="Search code or description",
+        shortcuts=ITEM_SHORTCUTS,
+        base_url=base_url,
+        noun="items",
+    )
+
+
 def item_list(request):
     company = request.company
     if company is None or not visible_branches(request.user, company).exists():
         return forbidden(request, "You need access to a Branch of this company to see its items.")
-    query = request.GET.get("q", "").strip()
-    show = request.GET.get("show", "")
-    items = _filtered_items(company, query, show)
+    table = _item_table(company, request.GET, request.path)
+    if table.wants_csv:
+        return table.csv_response(
+            f"items_{slugify(company.name)}_{timezone.localdate().isoformat()}.csv"
+        )
     can_manage = can_manage_items(request.user, company)
     context = {
-        "page": Paginator(items, ITEMS_PER_PAGE).get_page(request.GET.get("page")),
-        "q": query,
-        "show": show,
+        "table": table,
         "new_count": Item.objects.filter(company=company, is_new=True).count(),
-        "matching_new_count": items.filter(is_new=True).count() if can_manage else 0,
+        "matching_new_count": table.filtered.filter(is_new=True).count() if can_manage else 0,
         "can_manage": can_manage,
     }
     template = "audits/partials/item_table.html" if _is_htmx(request) else "audits/item_list.html"
-    return render(request, template, context)
-
-
-def _filtered_items(company, query: str, show: str):
-    """Items of the company matching the search box and the Show filter of the item list."""
-    items = Item.objects.filter(company=company)
-    if query:
-        items = items.filter(Q(code__icontains=query) | Q(description__icontains=query))
-    if show == "new":
-        items = items.filter(is_new=True)
-    elif show == "inactive":
-        items = items.filter(is_active=False)
-    return items
+    return _vary_on_htmx(render(request, template, context))
 
 
 def _posted_ids(request, name: str) -> list[int]:
@@ -369,15 +421,13 @@ def item_bulk_review(request):
     company = request.company
     if not can_manage_items(request.user, company):
         return forbidden(request, "Only Admin or users with “Tolerance & freeze” can edit items.")
-    query = request.POST.get("q", "").strip()
-    show = request.POST.get("show", "")
+    # The list's search and column filters, as they were when the user ticked "select all".
+    filters = _item_table(company, QueryDict(request.POST.get("filters", "")))
     if request.POST.get("all_matching") == "1":
-        items = _filtered_items(company, query, show).exclude(
-            pk__in=_posted_ids(request, "exclude")
-        )
+        items = filters.filtered.exclude(pk__in=_posted_ids(request, "exclude"))
     else:
         items = Item.objects.filter(company=company, pk__in=_posted_ids(request, "ids"))
-    list_url = f"{reverse('audits:item_list')}?{urlencode({'q': query, 'show': show})}"
+    list_url = f"{reverse('audits:item_list')}?{filters.filter_query}"
     with transaction.atomic():
         reviewed = list(items.filter(is_new=True))  # someone else may have reviewed some already
         expected = request.POST.get("expected", "")

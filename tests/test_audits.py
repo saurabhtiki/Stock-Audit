@@ -461,14 +461,14 @@ def test_bulk_review_all_matching_filter_with_exclusion(manager, new_items):
     client = client_for(manager)
     listing = client.get(reverse("audits:item_list"), {"q": "rm"}, HTTP_HX_REQUEST="true")
     assert 'data-matching="2"' in listing.content.decode()  # RM-1, RM-2 (not reviewed RM-3)
-    response = bulk_review(client, all_matching="1", q="rm", show="", exclude=[rm2.pk])
+    response = bulk_review(client, all_matching="1", filters="q=rm", exclude=[rm2.pk])
     assert set(Item.objects.filter(is_new=True).values_list("code", flat=True)) == {
         "RM-2",
         "FG-1",
         "RM-9",
     }
     assert ActivityLog.objects.filter(action="review").count() == 1
-    assert response.url.endswith("?q=rm&show=")
+    assert response.url.endswith("?q=rm")
 
 
 def test_bulk_review_needs_the_right(priya, new_items):
@@ -528,6 +528,6 @@ def test_bulk_review_ignores_bad_ids(manager, new_items):
 
 def test_bulk_review_refused_when_list_grew(manager, new_items):
     client = client_for(manager)
-    response = bulk_review(client, all_matching="1", q="rm", show="", expected="1", follow=True)
+    response = bulk_review(client, all_matching="1", filters="q=rm", expected="1", follow=True)
     assert Item.objects.filter(is_new=True).count() == 4  # nothing changed
     assert "The list changed: 2 items now match, not 1." in response.content.decode()

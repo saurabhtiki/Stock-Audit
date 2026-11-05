@@ -10,33 +10,18 @@
 {% if new_count %}
   <div role="alert" class="alert alert-soft alert-warning mb-4">
     <span>{{ new_count }} new item{{ new_count|pluralize }} came from ERP uploads and {{ new_count|pluralize:"is,are" }} not reviewed yet.</span>
-    <a href="?show=new" class="btn btn-sm">Show new items</a>
+    <a href="?status=new" class="btn btn-sm" title="Show only the items not reviewed yet">Show new items</a>
   </div>
 {% endif %}
 
 <div x-data="bulkReview" @pageshow.window="busy = false">
-  <form class="mb-4 flex flex-wrap items-center gap-2" hx-get="{% url 'audits:item_list' %}" hx-target="#item-table" hx-swap="outerHTML" hx-trigger="input delay:300ms, submit"
-        @input="reset()">
-    <span class="tooltip" data-tip="Search by item code or description">
-      <input type="search" name="q" value="{{ q }}" placeholder="Search code or description" aria-label="Search items" class="input input-sm w-64">
-    </span>
-    <span class="tooltip" data-tip="Show all, only new, or only inactive items">
-      <select name="show" class="select select-sm w-40" aria-label="Show">
-        <option value="">All items</option>
-        <option value="new" {% if show == "new" %}selected{% endif %}>New (not reviewed)</option>
-        <option value="inactive" {% if show == "inactive" %}selected{% endif %}>Inactive</option>
-      </select>
-    </span>
-  </form>
-
   {% if can_manage %}
     {# Bulk "Mark reviewed" bar: shows once at least one New item is ticked. #}
     <form method="post" action="{% url 'audits:item_bulk_review' %}" x-show="count > 0" x-cloak
           class="alert alert-soft alert-info mb-3 flex flex-wrap items-center gap-2"
           @submit="if (busy || !confirm(confirmText())) { $event.preventDefault() } else { busy = true }">
       {% csrf_token %}
-      <input type="hidden" name="q" :value="filterQ">
-      <input type="hidden" name="show" :value="filterShow">
+      <input type="hidden" name="filters" :value="filters">
       <input type="hidden" name="all_matching" :value="allMatching ? '1' : ''">
       <input type="hidden" name="expected" :value="count">
       <template x-for="id in (allMatching ? excluded : picked)" :key="id">

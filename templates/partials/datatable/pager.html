@@ -1,0 +1,26 @@
+{# Under the table: "Showing 26–50 of 1,240", rows per page, page links. Needs `table`. #}
+{% load humanize %}
+{% with page=table.page %}{% if page.paginator.count %}
+<div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+  <div class="flex flex-wrap items-center gap-3">
+    <span>Showing {{ page.start_index|intcomma }}–{{ page.end_index|intcomma }} of {{ page.paginator.count|intcomma }} {{ table.noun }}</span>
+    <form hx-get="{{ table.base_url }}" hx-push-url="true" hx-trigger="change" class="flex items-center gap-1">
+      {% for name, value in table.per_page_hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      <select name="per_page" class="select select-sm w-20" aria-label="Rows per page" title="How many rows to show on one page">
+        {% for size in table.page_sizes %}<option value="{{ size }}"{% if size == table.per_page %} selected{% endif %}>{{ size }}</option>{% endfor %}
+      </select>
+      <span class="text-base-content/60">per page</span>
+    </form>
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+    <nav class="join" aria-label="Pages">
+      {% if table.previous_url %}<a href="{{ table.previous_url }}" hx-get="{{ table.previous_url }}" hx-push-url="true" class="join-item btn btn-sm" title="Previous page">«</a>{% endif %}
+      {% for link in table.pager %}
+        {% if link.gap %}<span class="join-item btn btn-sm btn-disabled" aria-hidden="true">…</span>
+        {% else %}<a href="{{ link.url }}" hx-get="{{ link.url }}" hx-push-url="true" class="join-item btn btn-sm{% if link.current %} btn-primary{% endif %}"{% if link.current %} aria-current="page"{% endif %} title="Page {{ link.number }}">{{ link.number }}</a>{% endif %}
+      {% endfor %}
+      {% if table.next_url %}<a href="{{ table.next_url }}" hx-get="{{ table.next_url }}" hx-push-url="true" class="join-item btn btn-sm" title="Next page">»</a>{% endif %}
+    </nav>
+  {% endif %}
+</div>
+{% endif %}{% endwith %}
