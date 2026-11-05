@@ -5,19 +5,18 @@
 <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Check ERP file</li></ul></div>
 
 <h1 class="mb-1 text-2xl font-bold">Check ERP file</h1>
-<p class="mb-4 text-base-content/70">{{ upload.original_name }} · uploaded by {{ upload.uploaded_by.full_name }}. Nothing is saved until you confirm.</p>
+<p class="mb-4 text-base-content/70">
+  {{ file_name }}{% if upload %} · checked by {{ upload.uploaded_by.full_name }}{% endif %}.
+  {% if check.has_errors %}Nothing was saved. Fix the errors below in your file and upload it again.{% else %}Nothing is saved until you confirm. The file itself is not kept.{% endif %}
+</p>
 
 <div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
   <div class="stat"><div class="stat-title">Lines</div><div class="stat-value text-2xl">{{ check.rows|length|intcomma }}</div></div>
   <div class="stat"><div class="stat-title">Total value</div><div class="stat-value text-2xl">{{ check.total_value|floatformat:2|intcomma }}</div><div class="stat-desc">ERP Qty × Rate</div></div>
   <div class="stat"><div class="stat-title">Errors</div><div class="stat-value text-2xl {% if check.has_errors %}text-error{% endif %}">{{ check.error_count }}</div><div class="stat-desc">Must be fixed</div></div>
-  <div class="stat"><div class="stat-title">Warnings</div><div class="stat-value text-2xl {% if check.warning_rows %}text-warning{% endif %}">{{ check.warning_rows|length }}</div><div class="stat-desc">Negative ERP Qty</div></div>
+  <div class="stat"><div class="stat-title">Warnings</div><div class="stat-value text-2xl {% if check.warning_rows %}text-warning{% endif %}">{{ check.warning_rows|length }}</div><div class="stat-desc">Check before confirming</div></div>
   <div class="stat"><div class="stat-title">New items</div><div class="stat-value text-2xl">{{ new_item_count|intcomma }}</div><div class="stat-desc">Will be added as “New”</div></div>
 </div>
-
-{% if upload.status != "pending" %}
-  <div role="alert" class="alert alert-soft alert-info mb-4"><span>This file was already {{ upload.get_status_display|lower }}. To change the ERP Draft, upload a new file.</span></div>
-{% endif %}
 
 {% if check.file_errors %}
   <div role="alert" class="alert alert-soft alert-error mb-4"><ul class="list-disc pl-5">{% for error in check.file_errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
@@ -44,10 +43,10 @@
     <h2 class="mb-2 text-lg font-bold">Warnings — check these before you confirm</h2>
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm data-table" data-table="erp-warnings" data-csv-tip="Download the warning list">
-        <thead><tr><th>Row</th><th>Item No</th><th>Description</th><th class="text-right">ERP Qty</th><th>Warning</th></tr></thead>
+        <thead><tr><th>Row</th><th>Item No</th><th>Description</th><th class="text-right">ERP Qty</th><th class="text-right">Rate p.u.</th><th>Warning</th></tr></thead>
         <tbody>
           {% for row in check.warning_rows %}
-            <tr><td>{{ row.row_number }}</td><td class="font-bold">{{ row.code }}</td><td>{{ row.description }}</td><td class="text-right text-error">{{ row.qty }}</td><td>{{ row.warnings|join:" " }}</td></tr>
+            <tr><td>{{ row.row_number }}</td><td class="font-bold">{{ row.code }}</td><td>{{ row.description }}</td><td class="text-right {% if row.qty < 0 %}text-error{% endif %}">{{ row.qty|default_if_none:"—" }}</td><td class="text-right">{{ row.rate|default_if_none:"—" }}</td><td>{{ row.warnings|join:" " }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -56,7 +55,7 @@
 {% endif %}
 
 {% if can_confirm %}
-  <form method="post" class="card mb-4 bg-base-100" x-data="{ accepted: {% if check.warning_rows %}false{% else %}true{% endif %} }">
+  <form method="post" class="card mb-4 bg-base-100" x-data="{ accepted: {% if check.warning_rows %}false{% else %}true{% endif %}, busy: false }" @submit="busy = true" @pageshow.window="busy = false">
     {% csrf_token %}
     <div class="card-body gap-3">
       <h2 class="card-title">Save as ERP Draft</h2>
@@ -64,17 +63,18 @@
       {% if check.warning_rows %}
         <label class="label cursor-pointer gap-2 text-base-content">
           <input type="checkbox" name="accept_warnings" class="checkbox checkbox-warning" x-model="accepted">
-          I've checked the {{ check.warning_rows|length }} negative-quantity line{{ check.warning_rows|length|pluralize }}.
+          I've checked the {{ check.warning_rows|length }} warning line{{ check.warning_rows|length|pluralize }} and want to go ahead.
         </label>
+        <p class="text-sm text-base-content/70">Not happy with them? Fix your file and upload it again instead.</p>
       {% endif %}
       <div class="flex gap-2">
-        <button type="submit" class="btn btn-primary" :disabled="!accepted">Confirm and save</button>
+        <button type="submit" class="btn btn-primary" :disabled="!accepted || busy" title="Save these lines as the audit's ERP Draft">Confirm and save</button>
         <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-ghost">Back to audit</a>
       </div>
     </div>
   </form>
 {% else %}
-  <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-primary mb-4">Back to audit</a>
+  <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-primary mb-4" title="Go back and upload a corrected file">Back to audit</a>
 {% endif %}
 
 {% if check.rows %}

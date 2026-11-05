@@ -16,8 +16,8 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-<!-- delet last pase & update this line each time a phase is completed -->
-Phase 2 (items, audits with title, ERP upload/preview/replace, tolerance & freeze, cancel) done. Next: plan Phase 3 (physical count, offline count sheet, Checking Done).
+<!-- delet last phase & update this line each time a phase is completed -->
+Phase 2.1 (logout fix, UoM required, decimals as warnings, ERP file not stored, bulk mark Reviewed) done. Next: plan Phase 3 (physical count, offline count sheet, Checking Done).
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

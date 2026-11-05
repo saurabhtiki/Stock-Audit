@@ -1,4 +1,12 @@
 <tr id="item-{{ item.pk }}" class="{% if not item.is_active %}opacity-60{% endif %}">
+  {% if can_manage %}
+    <td>
+      {% if item.is_new %}
+        <input type="checkbox" class="checkbox checkbox-sm" data-review-id="{{ item.pk }}" aria-label="Tick {{ item.code }}" title="Tick to mark several New items reviewed together"
+               :checked="isTicked('{{ item.pk }}')" @change="tick('{{ item.pk }}', $el.checked)">
+      {% endif %}
+    </td>
+  {% endif %}
   <td class="font-bold">{{ item.code }}</td>
   <td>{{ item.description }}</td>
   <td>{{ item.uom }}</td>
@@ -11,7 +19,7 @@
     <td class="whitespace-nowrap text-right">
       {% if item.is_new %}
         <span class="tooltip tooltip-left" data-tip="Description and UoM are correct; remove the “New” mark">
-          <button class="btn btn-sm btn-success" hx-post="{% url 'audits:item_review' item.pk %}" hx-target="#item-{{ item.pk }}" hx-swap="outerHTML">Mark reviewed</button>
+          <button class="btn btn-sm btn-success" hx-post="{% url 'audits:item_review' item.pk %}" @click="tick('{{ item.pk }}', false)" hx-target="#item-{{ item.pk }}" hx-swap="outerHTML">Mark reviewed</button>
         </span>
       {% endif %}
       <a href="{% url 'audits:item_edit' item.pk %}" class="btn btn-sm btn-outline btn-primary">Edit</a>

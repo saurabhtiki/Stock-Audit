@@ -82,8 +82,8 @@
           {% for upload in uploads %}
             <tr>
               <td>
-                <a class="link" href="{% url 'audits:upload_download' upload.pk %}" title="Download the original file">{{ upload.original_name }}</a>
-                {% if upload.status == "pending" and can_upload %} · <a class="link link-primary" href="{% url 'audits:upload_preview' upload.pk %}">Preview</a>{% endif %}
+                {{ upload.original_name }}
+                {% if upload.status == "pending" and can_upload %} · <a class="link link-primary" href="{% url 'audits:upload_preview' upload.pk %}" title="Open the checked lines and confirm them">Preview</a>{% endif %}
               </td>
               <td>
                 {% if upload.status == "used" %}<span class="badge badge-soft badge-success">In use</span>
@@ -92,8 +92,8 @@
               </td>
               <td>{{ upload.uploaded_by.full_name }}</td>
               <td data-sort="{{ upload.uploaded_at|date:'c' }}">{{ upload.uploaded_at|date:"d M Y H:i" }}</td>
-              <td class="text-right">{% if upload.status != "pending" %}{{ upload.line_count|intcomma }}{% endif %}</td>
-              <td class="text-right">{% if upload.status != "pending" %}{{ upload.total_value|floatformat:2|intcomma }}{% endif %}</td>
+              <td class="text-right">{{ upload.line_count|intcomma }}</td>
+              <td class="text-right">{{ upload.total_value|floatformat:2|intcomma }}</td>
             </tr>
           {% endfor %}
         </tbody>

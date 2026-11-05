@@ -193,14 +193,17 @@ def test_upload_with_errors_is_blocked_and_nothing_saved(priya, audit):
         ["A100", "Bolt", "PCS", "abc", 2],
         ["A100", "Bolt", "PCS", 5, 2],
         ["", "No code", "PCS", 1, 1],
-        ["A300", "Nut", "PCS", 1.2345, 1],
+        ["A300", "Nut", "", 1, 1],
     ]
-    response = upload_and_confirm(client, audit, xlsx_file(rows))
+    response = upload(client, audit, xlsx_file(rows))
     text = response.content.decode()
     assert "ERP Qty “abc” is not a number." in text
     assert "is repeated (first on row 2)" in text
     assert "Item No is missing." in text
-    assert "more than 3 decimals" in text
+    assert "UoM is missing." in text
+    assert "Nothing was saved" in text
+    assert "Confirm and save" not in text
+    assert not ErpUpload.objects.exists()
     assert not AuditLine.objects.exists()
     assert not Item.objects.exists()
 
@@ -227,7 +230,7 @@ def test_negative_qty_needs_the_tick(priya, audit):
     client = client_for(priya)
     rows = [*GOOD_ROWS, ["A300", "Nut", "PCS", -3, 1]]
     response = upload_and_confirm(client, audit, xlsx_file(rows))
-    assert "negative-quantity" in response.content.decode()
+    assert "checked the 1 warning line" in response.content.decode()
     assert not AuditLine.objects.exists()
     pending = audit.uploads.get()
     client.post(reverse("audits:upload_preview", args=[pending.pk]), {"accept_warnings": "on"})
@@ -262,8 +265,7 @@ def test_csv_with_any_heading_order_and_case(priya, audit):
 def test_missing_and_unknown_columns(priya, audit):
     client = client_for(priya)
     response = upload(client, audit, xlsx_file([], headings=["Item No", "Qty"]))
-    assert response.status_code == 302
-    page = client.get(response.url).content.decode()
+    page = response.content.decode()
     assert "Column “Qty” is not in the template" in page
     assert "Column “ERP Qty” not found." in page
     assert not ErpUpload.objects.exists()
@@ -273,17 +275,18 @@ def test_row_and_size_limits(priya, audit, settings):
     client = client_for(priya)
     settings.ERP_UPLOAD_MAX_ROWS = 2
     rows = [*GOOD_ROWS, ["A300", "Nut", "PCS", 1, 1]]
-    page = client.get(upload(client, audit, xlsx_file(rows)).url).content.decode()
+    page = upload(client, audit, xlsx_file(rows)).content.decode()
     assert "more than 2 lines" in page
     settings.ERP_UPLOAD_MAX_BYTES = 10
-    page = client.get(upload(client, audit, xlsx_file(GOOD_ROWS)).url).content.decode()
+    page = upload(client, audit, xlsx_file(GOOD_ROWS)).content.decode()
     assert "File is too big" in page
 
 
 def test_wrong_file_type(priya, audit):
     client = client_for(priya)
     response = upload(client, audit, SimpleUploadedFile("erp.pdf", b"%PDF"))
-    assert "Only .xlsx (Excel) or .csv" in client.get(response.url).content.decode()
+    assert "Only .xlsx (Excel) or .csv" in response.content.decode()
+    assert not ErpUpload.objects.exists()
 
 
 def test_user_without_upload_right_cannot_upload(manager, audit):
@@ -395,3 +398,136 @@ def test_items_and_audits_are_never_deleted(audit, company_a):
         item.delete()
     with pytest.raises(Exception, match="never deleted"):
         audit.delete()
+
+
+# ---------- Phase 2.1 ----------
+
+
+def test_extra_decimals_are_a_warning_and_rounded(priya, audit):
+    client = client_for(priya)
+    rows = [["A100", "Bolt", "PCS", "12.34567", "1.235"]]
+    response = upload(client, audit, xlsx_file(rows))
+    pending = audit.uploads.get()
+    text = client.get(reverse("audits:upload_preview", args=[pending.pk])).content.decode()
+    assert response.status_code == 302
+    assert "ERP Qty 12.34567 has more than 3 decimals; it will be saved as 12.346." in text
+    assert "Rate p.u. 1.235 has more than 2 decimals; it will be saved as 1.24." in text
+    client.post(reverse("audits:upload_preview", args=[pending.pk]))  # no tick
+    assert not AuditLine.objects.exists()
+    client.post(reverse("audits:upload_preview", args=[pending.pk]), {"accept_warnings": "on"})
+    line = audit.lines.get()
+    assert (line.erp_qty, line.rate) == (Decimal("12.346"), Decimal("1.24"))
+
+
+def test_uploaded_file_is_not_stored(priya, audit, tmp_path):
+    client = client_for(priya)
+    upload(client, audit, xlsx_file(GOOD_ROWS))
+    pending = audit.uploads.get()
+    assert len(pending.rows) == 2 and pending.line_count == 2
+    assert not any(tmp_path.rglob("*.xlsx"))
+    client.post(reverse("audits:upload_preview", args=[pending.pk]))
+    pending.refresh_from_db()
+    assert pending.status == "used" and pending.rows == []
+    # A confirmed upload can't be opened again; it sends the user back to the audit.
+    response = client.get(reverse("audits:upload_preview", args=[pending.pk]))
+    assert response.url == reverse("audits:audit_detail", args=[audit.pk])
+
+
+def bulk_review(client, follow=False, **data):
+    return client.post(reverse("audits:item_bulk_review"), data, follow=follow)
+
+
+@pytest.fixture
+def new_items(company_a, company_b):
+    made = [
+        Item.objects.create(company=company_a, code=code, description=text, is_new=True)
+        for code, text in [("RM-1", "Raw steel"), ("RM-2", "Raw paint"), ("FG-1", "Finished bolt")]
+    ]
+    made.append(Item.objects.create(company=company_a, code="RM-3", is_new=False))
+    made.append(Item.objects.create(company=company_b, code="RM-9", is_new=True))
+    return made
+
+
+def test_bulk_review_ticked_items(manager, new_items):
+    rm1, _rm2, fg1, _rm3, other_company = new_items
+    response = bulk_review(client_for(manager), ids=[rm1.pk, fg1.pk, other_company.pk])
+    assert response.status_code == 302
+    assert set(Item.objects.filter(is_new=True).values_list("code", flat=True)) == {"RM-2", "RM-9"}
+    assert ActivityLog.objects.filter(action="review", record_type="Item").count() == 2
+
+
+def test_bulk_review_all_matching_filter_with_exclusion(manager, new_items):
+    _rm1, rm2, _fg1, _rm3, _other = new_items
+    client = client_for(manager)
+    listing = client.get(reverse("audits:item_list"), {"q": "rm"}, HTTP_HX_REQUEST="true")
+    assert 'data-matching="2"' in listing.content.decode()  # RM-1, RM-2 (not reviewed RM-3)
+    response = bulk_review(client, all_matching="1", q="rm", show="", exclude=[rm2.pk])
+    assert set(Item.objects.filter(is_new=True).values_list("code", flat=True)) == {
+        "RM-2",
+        "FG-1",
+        "RM-9",
+    }
+    assert ActivityLog.objects.filter(action="review").count() == 1
+    assert response.url.endswith("?q=rm&show=")
+
+
+def test_bulk_review_needs_the_right(priya, new_items):
+    response = bulk_review(client_for(priya), ids=[new_items[0].pk])
+    assert response.status_code == 403
+    assert Item.objects.filter(is_new=True).count() == 4
+
+
+def test_logout_is_one_post_and_lands_on_login(priya):
+    client = client_for(priya)
+    assert client.get(reverse("accounts:logout")).status_code == 405
+    response = client.post(reverse("accounts:logout"), follow=True)
+    assert response.redirect_chain[-1][0] == reverse("accounts:login")
+    assert "You are logged out." in response.content.decode()
+    assert "_auth_user_id" not in client.session
+
+
+def test_navbar_logout_row_is_the_submit_button(priya):
+    text = client_for(priya).get(reverse("core:home")).content.decode()
+    assert 'form="logout-form"' in text and 'id="logout-form"' in text
+
+
+def test_too_long_uom_and_too_big_numbers_are_errors(priya, audit):
+    rows = [
+        ["A1", "x", "U" * 21, 1, 1],
+        ["A2", "x", "PCS", 123456789012, 1],
+        ["A3", "x", "PCS", 99999999999, 999999999],
+    ]
+    text = upload(client_for(priya), audit, xlsx_file(rows)).content.decode()
+    assert "UoM is longer than 20 characters." in text
+    assert "ERP Qty 123456789012 is too big." in text
+    assert "ERP Qty × Rate p.u. is too big." in text
+    assert not ErpUpload.objects.exists()
+
+
+def test_rounding_and_negative_warnings_on_one_row(priya, audit):
+    client = client_for(priya)
+    upload(client, audit, xlsx_file([["A1", "x", "PCS", "-1.23456", 1]]))
+    pending = audit.uploads.get()
+    assert len(pending.rows[0][6]) == 2
+    client.post(reverse("audits:upload_preview", args=[pending.pk]), {"accept_warnings": "on"})
+    assert audit.lines.get().erp_qty == Decimal("-1.235")
+
+
+def test_confirm_clears_other_pending_rows(priya, audit):
+    client = client_for(priya)
+    upload(client, audit, xlsx_file(GOOD_ROWS))
+    upload_and_confirm(client, audit, xlsx_file(GOOD_ROWS))
+    assert all(saved.rows == [] for saved in audit.uploads.all())
+
+
+def test_bulk_review_ignores_bad_ids(manager, new_items):
+    response = bulk_review(client_for(manager), ids=["²", "abc", str(new_items[0].pk)])
+    assert response.status_code == 302
+    assert Item.objects.filter(is_new=True).count() == 3
+
+
+def test_bulk_review_refused_when_list_grew(manager, new_items):
+    client = client_for(manager)
+    response = bulk_review(client, all_matching="1", q="rm", show="", expected="1", follow=True)
+    assert Item.objects.filter(is_new=True).count() == 4  # nothing changed
+    assert "The list changed: 2 items now match, not 1." in response.content.decode()

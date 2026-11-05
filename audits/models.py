@@ -122,12 +122,16 @@ class Audit(models.Model):
 
 
 def erp_upload_path(instance, filename: str) -> str:
-    # Random name on disk; the original name is kept in the database.
+    # Only used by migration 0001; ERP files are no longer stored (Phase 2.1).
     return f"erp/{instance.audit_id}/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
 
 
 class ErpUpload(models.Model):
-    """Every ERP file uploaded for an audit, kept on disk for traceability."""
+    """One checked ERP file of an audit. The file itself is never stored.
+
+    A file without errors keeps its checked lines in `rows` until the user confirms;
+    after confirming they live in AuditLine and `rows` is emptied.
+    """
 
     class Status(models.TextChoices):
         PENDING = "pending", "Not confirmed"
@@ -135,7 +139,7 @@ class ErpUpload(models.Model):
         REPLACED = "replaced", "Replaced"
 
     audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="uploads")
-    file = models.FileField(upload_to=erp_upload_path)
+    rows = models.JSONField(default=list, blank=True)
     original_name = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     uploaded_by = models.ForeignKey(

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Items{% endblock %}
 {% block content %}
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -13,18 +14,47 @@
   </div>
 {% endif %}
 
-<form class="mb-4 flex flex-wrap items-center gap-2" hx-get="{% url 'audits:item_list' %}" hx-target="#item-table" hx-swap="outerHTML" hx-trigger="input delay:300ms, submit">
-  <span class="tooltip" data-tip="Search by item code or description">
-    <input type="search" name="q" value="{{ q }}" placeholder="Search code or description" aria-label="Search items" class="input input-sm w-64">
-  </span>
-  <span class="tooltip" data-tip="Show all, only new, or only inactive items">
-    <select name="show" class="select select-sm w-40" aria-label="Show">
-      <option value="">All items</option>
-      <option value="new" {% if show == "new" %}selected{% endif %}>New (not reviewed)</option>
-      <option value="inactive" {% if show == "inactive" %}selected{% endif %}>Inactive</option>
-    </select>
-  </span>
-</form>
+<div x-data="bulkReview" @pageshow.window="busy = false">
+  <form class="mb-4 flex flex-wrap items-center gap-2" hx-get="{% url 'audits:item_list' %}" hx-target="#item-table" hx-swap="outerHTML" hx-trigger="input delay:300ms, submit"
+        @input="reset()">
+    <span class="tooltip" data-tip="Search by item code or description">
+      <input type="search" name="q" value="{{ q }}" placeholder="Search code or description" aria-label="Search items" class="input input-sm w-64">
+    </span>
+    <span class="tooltip" data-tip="Show all, only new, or only inactive items">
+      <select name="show" class="select select-sm w-40" aria-label="Show">
+        <option value="">All items</option>
+        <option value="new" {% if show == "new" %}selected{% endif %}>New (not reviewed)</option>
+        <option value="inactive" {% if show == "inactive" %}selected{% endif %}>Inactive</option>
+      </select>
+    </span>
+  </form>
 
-{% include "audits/partials/item_table.html" %}
+  {% if can_manage %}
+    {# Bulk "Mark reviewed" bar: shows once at least one New item is ticked. #}
+    <form method="post" action="{% url 'audits:item_bulk_review' %}" x-show="count > 0" x-cloak
+          class="alert alert-soft alert-info mb-3 flex flex-wrap items-center gap-2"
+          @submit="if (busy || !confirm(confirmText())) { $event.preventDefault() } else { busy = true }">
+      {% csrf_token %}
+      <input type="hidden" name="q" :value="filterQ">
+      <input type="hidden" name="show" :value="filterShow">
+      <input type="hidden" name="all_matching" :value="allMatching ? '1' : ''">
+      <input type="hidden" name="expected" :value="count">
+      <template x-for="id in (allMatching ? excluded : picked)" :key="id">
+        <input type="hidden" :name="allMatching ? 'exclude' : 'ids'" :value="id">
+      </template>
+      <span class="font-bold" x-text="selectedText()"></span>
+      <button type="button" class="link link-primary text-sm" x-show="!allMatching && matching > picked.length" @click="selectAllMatching()"
+              title="Also tick New items on the other pages of this list" x-text="selectAllText()"></button>
+      <span class="flex-1"></span>
+      <button type="submit" class="btn btn-sm btn-success" :disabled="busy" title="Remove the “New” mark from the ticked items">
+        <span x-show="!busy" x-text="`Mark ${count} reviewed`"></span>
+        <span x-show="busy" class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Saving…</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" @click="reset()" title="Untick all">Clear</button>
+    </form>
+  {% endif %}
+
+  {% include "audits/partials/item_table.html" %}
+</div>
+<script src="{% static 'js/item_bulk_review.js' %}"></script>
 {% endblock %}

@@ -1,9 +1,9 @@
 {% load humanize %}
-<div id="item-table">
+<div id="item-table" data-matching="{{ matching_new_count }}" data-q="{{ q }}" data-show="{{ show }}" x-init="tableLoaded($el)">
   {% if page.paginator.count %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table" data-table="items" data-filter="off" data-csv-tip="Download the items on this page">
-        <thead><tr><th>Item code</th><th>Description</th><th>UoM</th><th>Status</th>{% if can_manage %}<th class="text-right" data-nosort data-csv-skip>Actions</th>{% endif %}</tr></thead>
+        <thead><tr>{% if can_manage %}<th class="w-8" data-nosort data-csv-skip>{% if matching_new_count %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all New items on this page" title="Tick or untick all New items on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}<th>Item code</th><th>Description</th><th>UoM</th><th>Status</th>{% if can_manage %}<th class="text-right" data-nosort data-csv-skip>Actions</th>{% endif %}</tr></thead>
         <tbody>
           {% for item in page %}{% include "audits/partials/item_row.html" %}{% endfor %}
         </tbody>

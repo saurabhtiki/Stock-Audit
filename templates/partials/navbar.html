@@ -53,13 +53,17 @@
           <li><a href="{% url 'accounts:profile' %}">My profile and photo</a></li>
           <li><a href="{% url 'accounts:password_change' %}">Change password</a></li>
           <li>
-            <form method="post" action="{% url 'accounts:logout' %}">
-              {% csrf_token %}
-              <button type="submit" class="w-full text-left">Log out</button>
-            </form>
+            {# The button itself is the menu row, so a click anywhere on the row logs out. #}
+            <button type="submit" form="logout-form" title="Log out and go to the login page"
+                    x-data="{ busy: false }" @pageshow.window="busy = false" :disabled="busy" :aria-busy="busy"
+                    @click.prevent="if (!busy) { busy = true; $el.form.requestSubmit() }">
+              <span x-show="!busy">Log out</span>
+              <span x-show="busy" x-cloak class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Logging out…</span>
+            </button>
           </li>
         </ul>
       </details>
+      <form id="logout-form" method="post" action="{% url 'accounts:logout' %}" class="hidden">{% csrf_token %}</form>
     </div>
   </nav>
   <div class="tape-stripe" aria-hidden="true"></div>

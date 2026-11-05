@@ -1,6 +1,7 @@
 """Read an ERP stock file (.xlsx or .csv), check every row, and save it as the audit's ERP Draft.
 
-Checking never saves anything. Saving happens only in `confirm_upload`.
+The file itself is never stored. A file with errors saves nothing; a clean file keeps only
+its checked lines on an ErpUpload until `confirm_upload` turns them into AuditLines.
 """
 
 import csv
@@ -139,7 +140,14 @@ def _text(value) -> str:
     return " ".join(str(value).split())
 
 
-def _number(value, label: str, places: int, errors: list[str]) -> Decimal | None:
+# Largest whole-number part that fits the database fields (max_digits - decimal places).
+MAX_WHOLE_DIGITS = {"ERP Qty": 11, "Rate p.u.": 12}
+MAX_VALUE = Decimal(10) ** 16  # ERP value field: 18 digits, 2 decimals
+
+
+def _number(
+    value, label: str, places: int, errors: list[str], warnings: list[str]
+) -> Decimal | None:
     text = _text(value).replace(",", "")
     if text == "":
         errors.append(f"{label} is missing.")
@@ -151,9 +159,15 @@ def _number(value, label: str, places: int, errors: list[str]) -> Decimal | None
     if number is None or not number.is_finite():
         errors.append(f"{label} “{_text(value)}” is not a number.")
         return None
-    if -number.normalize().as_tuple().exponent > places:
-        errors.append(f"{label} {_text(value)} has more than {places} decimals.")
+    if abs(number) >= Decimal(10) ** MAX_WHOLE_DIGITS[label]:
+        errors.append(f"{label} {_text(value)} is too big.")
         return None
+    if -number.normalize().as_tuple().exponent > places:
+        rounded = number.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+        warnings.append(
+            f"{label} {_text(value)} has more than {places} decimals; it will be saved as {rounded}."
+        )
+        return rounded
     return number
 
 
@@ -180,27 +194,35 @@ def _find_columns(headings: list, file_errors: list[str]) -> dict[str, int]:
 
 def _check_row(row_number: int, cells: dict) -> ErpRow:
     errors: list[str] = []
+    warnings: list[str] = []
     code = _text(cells["code"])
     if not code:
         errors.append("Item No is missing.")
     elif len(code) > 50:
         errors.append("Item No is longer than 50 characters.")
-    qty = _number(cells["qty"], "ERP Qty", 3, errors)
-    rate = _number(cells["rate"], "Rate p.u.", 2, errors)
+    uom = _text(cells["uom"])
+    if not uom:
+        errors.append("UoM is missing.")
+    elif len(uom) > 20:
+        errors.append("UoM is longer than 20 characters.")
+    qty = _number(cells["qty"], "ERP Qty", 3, errors, warnings)
+    rate = _number(cells["rate"], "Rate p.u.", 2, errors, warnings)
     if rate is not None and rate < 0:
         errors.append("Rate p.u. cannot be negative.")
-    row = ErpRow(
+    if qty is not None and qty < 0:
+        warnings.append("ERP Qty is negative.")
+    if qty is not None and rate is not None and abs(qty * rate) >= MAX_VALUE:
+        errors.append("ERP Qty × Rate p.u. is too big.")
+    return ErpRow(
         row_number=row_number,
         code=code,
         description=_text(cells["description"])[:255],
-        uom=_text(cells["uom"])[:20],
+        uom=uom,
         qty=qty,
         rate=rate,
         errors=errors,
+        warnings=warnings,
     )
-    if qty is not None and qty < 0:
-        row.warnings.append("ERP Qty is negative.")
-    return row
 
 
 def check_file(uploaded_file, name: str) -> ErpCheck:
@@ -252,9 +274,38 @@ def check_file(uploaded_file, name: str) -> ErpCheck:
     return result
 
 
-def check_upload(upload: ErpUpload) -> ErpCheck:
-    with upload.file.open("rb") as stored:
-        return check_file(stored, upload.original_name)
+def rows_to_json(check: ErpCheck) -> list[list]:
+    """Checked rows (no errors) in a small form to keep until the user confirms."""
+    return [
+        [
+            row.row_number,
+            row.code,
+            row.description,
+            row.uom,
+            str(row.qty),
+            str(row.rate),
+            row.warnings,
+        ]
+        for row in check.rows
+    ]
+
+
+def saved_check(upload: ErpUpload) -> ErpCheck:
+    """Rebuild the check result from the lines kept on an unconfirmed upload."""
+    return ErpCheck(
+        rows=[
+            ErpRow(
+                row_number=number,
+                code=code,
+                description=description,
+                uom=uom,
+                qty=Decimal(qty),
+                rate=Decimal(rate),
+                warnings=list(warnings),
+            )
+            for number, code, description, uom, qty, rate, warnings in upload.rows
+        ]
+    )
 
 
 # ---------- Saving ----------
@@ -274,13 +325,14 @@ def confirm_upload(actor, upload: ErpUpload, accept_warnings: bool) -> ErpUpload
         raise UploadNotAllowed("ERP stock is frozen. The file can no longer be changed.")
     if upload.status != ErpUpload.Status.PENDING:
         raise UploadNotAllowed("This file was already confirmed or replaced. Upload it again.")
-    check = check_upload(upload)
-    if check.has_errors:
-        raise UploadNotAllowed("Fix the errors in the file and upload it again.")
-    if check.warning_rows and not accept_warnings:
+    check = saved_check(upload)
+    if not check.rows:
+        raise UploadNotAllowed("This file has no lines to save. Upload it again.")
+    warning_count = len(check.warning_rows)
+    if warning_count and not accept_warnings:
         raise UploadNotAllowed(
-            f"Tick the box to confirm you checked the {len(check.warning_rows)} "
-            "negative-quantity lines."
+            f"Tick the box to confirm you checked the {warning_count} "
+            f"warning line{'s' if warning_count != 1 else ''}."
         )
 
     company = audit.branch.company
@@ -295,6 +347,8 @@ def confirm_upload(actor, upload: ErpUpload, accept_warnings: bool) -> ErpUpload
         items = {item.code.lower(): item for item in Item.objects.filter(company=company)}
 
     previous = audit.current_upload
+    # Other checked-but-unconfirmed files of this audit no longer need their lines.
+    audit.uploads.filter(status=ErpUpload.Status.PENDING).exclude(pk=upload.pk).update(rows=[])
     # Draft lines are replaced as a whole; nothing else points at them yet.
     AuditLine.objects.filter(audit=audit).delete()
     AuditLine.objects.bulk_create(
@@ -319,7 +373,8 @@ def confirm_upload(actor, upload: ErpUpload, accept_warnings: bool) -> ErpUpload
     upload.status = ErpUpload.Status.USED
     upload.line_count = len(check.rows)
     upload.total_value = check.total_value
-    upload.save(update_fields=["status", "line_count", "total_value"])
+    upload.rows = []  # the lines now live in AuditLine
+    upload.save(update_fields=["status", "line_count", "total_value", "rows"])
 
     log_activity(
         actor,

@@ -1,12 +1,14 @@
 import logging
 from datetime import date
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import FileResponse, HttpResponse
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -177,22 +179,52 @@ def erp_upload(request, pk):
         return redirect("audits:audit_detail", pk=audit.pk)
     uploaded = form.cleaned_data["file"]
     check = erp_import.check_file(uploaded, uploaded.name)
-    if check.file_errors:
-        # The file can't be used at all (wrong type, too big, wrong columns): don't keep it.
-        for error in check.file_errors:
-            messages.error(request, error)
-        return redirect("audits:audit_detail", pk=audit.pk)
-    uploaded.seek(0)
+    if check.has_errors:
+        # Nothing is saved: show the errors; the user fixes the file and uploads again.
+        logger.info(
+            "ERP file %s for audit %s has %s errors", uploaded.name, audit.pk, check.error_count
+        )
+        return _render_upload_check(request, audit, check, uploaded.name, upload=None)
     upload = ErpUpload.objects.create(
-        audit=audit, file=uploaded, original_name=uploaded.name[:255], uploaded_by=request.user
+        audit=audit,
+        rows=erp_import.rows_to_json(check),
+        original_name=uploaded.name[:255],
+        uploaded_by=request.user,
+        line_count=len(check.rows),
+        total_value=check.total_value,
     )
     return redirect("audits:upload_preview", pk=upload.pk)
+
+
+def _render_upload_check(request, audit, check, file_name: str, upload):
+    new_codes = {row.code.lower() for row in check.rows} - {
+        code.lower()
+        for code in Item.objects.filter(company=audit.branch.company).values_list("code", flat=True)
+    }
+    return render(
+        request,
+        "audits/upload_preview.html",
+        {
+            "audit": audit,
+            "upload": upload,
+            "file_name": file_name,
+            "check": check,
+            "new_item_count": len(new_codes),
+            "can_confirm": upload is not None and can_upload(request.user, audit),
+        },
+    )
 
 
 def upload_preview(request, pk):
     upload = get_object_or_404(ErpUpload, pk=pk)
     audit = get_visible_audit(request, upload.audit_id)
-    check = erp_import.check_upload(upload)
+    if upload.status != ErpUpload.Status.PENDING:
+        messages.info(
+            request,
+            f"“{upload.original_name}” was already {upload.get_status_display().lower()}. "
+            "To change the ERP Draft, upload a new file.",
+        )
+        return redirect("audits:audit_detail", pk=audit.pk)
     if request.method == "POST":
         if not can_upload(request.user, audit):
             return forbidden(request, "You can no longer change the ERP file of this audit.")
@@ -209,29 +241,9 @@ def upload_preview(request, pk):
                 f"ERP Draft saved: {upload.line_count:,} lines, total value {upload.total_value:,}.",
             )
             return redirect("audits:audit_detail", pk=audit.pk)
-    new_codes = {row.code.lower() for row in check.rows} - {
-        code.lower()
-        for code in Item.objects.filter(company=audit.branch.company).values_list("code", flat=True)
-    }
-    return render(
-        request,
-        "audits/upload_preview.html",
-        {
-            "audit": audit,
-            "upload": upload,
-            "check": check,
-            "new_item_count": len(new_codes),
-            "can_confirm": upload.status == ErpUpload.Status.PENDING
-            and not check.has_errors
-            and can_upload(request.user, audit),
-        },
+    return _render_upload_check(
+        request, audit, erp_import.saved_check(upload), upload.original_name, upload
     )
-
-
-def upload_download(request, pk):
-    upload = get_object_or_404(ErpUpload, pk=pk)
-    get_visible_audit(request, upload.audit_id)
-    return FileResponse(upload.file.open("rb"), as_attachment=True, filename=upload.original_name)
 
 
 # ---------- Tolerance + freeze ----------
@@ -317,24 +329,78 @@ def item_list(request):
     company = request.company
     if company is None or not visible_branches(request.user, company).exists():
         return forbidden(request, "You need access to a Branch of this company to see its items.")
-    items = Item.objects.filter(company=company)
     query = request.GET.get("q", "").strip()
     show = request.GET.get("show", "")
+    items = _filtered_items(company, query, show)
+    can_manage = can_manage_items(request.user, company)
+    context = {
+        "page": Paginator(items, ITEMS_PER_PAGE).get_page(request.GET.get("page")),
+        "q": query,
+        "show": show,
+        "new_count": Item.objects.filter(company=company, is_new=True).count(),
+        "matching_new_count": items.filter(is_new=True).count() if can_manage else 0,
+        "can_manage": can_manage,
+    }
+    template = "audits/partials/item_table.html" if _is_htmx(request) else "audits/item_list.html"
+    return render(request, template, context)
+
+
+def _filtered_items(company, query: str, show: str):
+    """Items of the company matching the search box and the Show filter of the item list."""
+    items = Item.objects.filter(company=company)
     if query:
         items = items.filter(Q(code__icontains=query) | Q(description__icontains=query))
     if show == "new":
         items = items.filter(is_new=True)
     elif show == "inactive":
         items = items.filter(is_active=False)
-    context = {
-        "page": Paginator(items, ITEMS_PER_PAGE).get_page(request.GET.get("page")),
-        "q": query,
-        "show": show,
-        "new_count": Item.objects.filter(company=company, is_new=True).count(),
-        "can_manage": can_manage_items(request.user, company),
-    }
-    template = "audits/partials/item_table.html" if _is_htmx(request) else "audits/item_list.html"
-    return render(request, template, context)
+    return items
+
+
+def _posted_ids(request, name: str) -> list[int]:
+    return [
+        int(value) for value in request.POST.getlist(name) if value.isdecimal() and value.isascii()
+    ]
+
+
+@require_POST
+def item_bulk_review(request):
+    """Mark many New items Reviewed: ticked rows, or every item matching the search/filter."""
+    company = request.company
+    if not can_manage_items(request.user, company):
+        return forbidden(request, "Only Admin or users with “Tolerance & freeze” can edit items.")
+    query = request.POST.get("q", "").strip()
+    show = request.POST.get("show", "")
+    if request.POST.get("all_matching") == "1":
+        items = _filtered_items(company, query, show).exclude(
+            pk__in=_posted_ids(request, "exclude")
+        )
+    else:
+        items = Item.objects.filter(company=company, pk__in=_posted_ids(request, "ids"))
+    list_url = f"{reverse('audits:item_list')}?{urlencode({'q': query, 'show': show})}"
+    with transaction.atomic():
+        reviewed = list(items.filter(is_new=True))  # someone else may have reviewed some already
+        expected = request.POST.get("expected", "")
+        if expected.isdecimal() and len(reviewed) > int(expected):
+            # The list grew after the user confirmed (e.g. a new ERP upload): don't touch extra items.
+            messages.error(
+                request,
+                f"The list changed: {len(reviewed):,} items now match, not {int(expected):,}. "
+                "Nothing was changed. Check the list and try again.",
+            )
+            logger.info("Bulk review refused: %s matching, %s confirmed", len(reviewed), expected)
+            return redirect(list_url)
+        # is_new=True again here so an item reviewed by someone else meanwhile is not logged twice.
+        Item.objects.filter(pk__in=[item.pk for item in reviewed], is_new=True).update(is_new=False)
+        for item in reviewed:
+            log_activity(request.user, "review", item, {"is_new": [True, False]})
+    if reviewed:
+        messages.success(
+            request, f"{len(reviewed):,} item{'s' if len(reviewed) != 1 else ''} marked Reviewed."
+        )
+    else:
+        messages.info(request, "No New items were selected, so nothing changed.")
+    return redirect(list_url)
 
 
 def item_form(request, pk=None):

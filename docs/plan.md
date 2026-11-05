@@ -158,3 +158,35 @@ Counting, offline count sheet, Checking Done, queries, actions, media, locking, 
 - Admin cancel must also check "nothing counted yet" once counts exist.
 - Uploaded ERP files sit under `media/` with random names; serve all media through a
   permission check before going live.
+
+---
+
+## Phase 2.1 — Fixes before Phase 3 (DONE — 97 tests pass)
+
+Small fixes the user asked for after trying Phase 2. Confirmed in chat (grilled point by point).
+
+### Decisions
+| # | Decision |
+|---|---|
+| 1 | **Logout bug first**: the whole "Log out" menu row is the button; one click logs out, the button shows "Logging out…" and can't be clicked twice; user lands on the login page with "You are logged out." |
+| 2 | **UoM is required** in the ERP file. Blank UoM = error, e.g. *"Row 7: UoM is missing."* |
+| 3 | **Too many decimals = warning, not error.** Limits stay (qty 3, rate 2). Extra decimals are rounded (half up), e.g. *"ERP Qty 12.34567 will be saved as 12.346."* The same tick box accepts all warnings ("I've checked the 4 warning lines"). Or the user uploads a new file. |
+| 4 | **Uploaded file is not stored or shown.** File has errors → nothing saved, the error list is shown, user fixes and uploads again. No errors → only the checked lines are kept until Confirm, then the summary + Confirm button. No download link. (Replaces Phase 2 decision 10.) |
+| 5 | **Mark many New items Reviewed at once.** Tick rows by hand, tick "all on this page", or after a search/filter (e.g. "rm") pick "Select all 38 matching". Button "Mark N reviewed" asks *"38 items will be marked Reviewed. Continue?"* Only items still New change; each change is logged. |
+
+### What gets built
+1. Navbar logout fix (template + small Alpine/JS guard).
+2. `erp_import`: blank UoM error; decimals rounded with a warning; general warning text.
+3. `ErpUpload`: drop the file field, keep the checked lines (JSON) until Confirm; errors shown straight after "Check file" without saving; remove the download link/URL.
+4. Items list: checkboxes, select-all-on-page, select-all-matching, bulk "Mark reviewed" with confirm.
+
+### Tests
+- logout: one POST logs out and redirects to login with the message; GET is refused
+- blank UoM → error; 12.34567 qty → warning and saved as 12.346; rate 1.239 → 1.24
+- warnings (decimals or negative) need the tick
+- file with errors → no ErpUpload row, errors shown; clean file → no file on disk, confirm works
+- bulk review: by ids, by filter ("rm"), only New items change, other company's items untouched, no right → refused, one log row per item
+
+### Left for later (from code review)
+- Bulk review writes one log row per item (fine for hundreds; batch it if thousands become common).
+- Refreshing the error page asks to resend the old file (nothing is saved, so harmless).
