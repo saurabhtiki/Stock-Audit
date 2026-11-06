@@ -30,6 +30,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves CSS / JS in every environment, also with debug off (test, production).
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -105,6 +107,10 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT.mkdir(exist_ok=True)  # WhiteNoise warns when it is missing
+# Development and test read CSS / JS straight from static/ (no collectstatic needed).
+# Production serves the collected, compressed copies (see production.py).
+WHITENOISE_USE_FINDERS = True
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media" / DJANGO_ENV

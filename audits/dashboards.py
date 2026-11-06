@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Abs, TruncMonth
 from django.utils import timezone
 
@@ -133,7 +133,26 @@ def read_filters(params, allowed_branches, today: date | None = None) -> Dashboa
 
 def status_rows(filters: DashboardFilters, include_cancelled: bool = False):
     """One row per audit: lines, % counted and its own queries still open."""
-    audits = filters.audits(include_cancelled).annotate(
+    return with_progress(filters.audits(include_cancelled))
+
+
+def erp_value_of_audit():
+    """Total ERP value of one audit, as a subquery (so joins to lines / queries in the same
+    query can't multiply the sum)."""
+    total = (
+        AuditLine.objects.filter(audit=OuterRef("pk"))
+        .order_by()
+        .values("audit")
+        .annotate(total=Sum("erp_value"))
+        .values("total")
+    )
+    return Subquery(total, output_field=DecimalField(max_digits=20, decimal_places=2))
+
+
+def with_progress(audits):
+    """Adds Branch code, lines, % counted and open queries to each audit.
+    Used by the dashboard status grid and the Audits list."""
+    audits = audits.annotate(
         branch_code=F("branch__code"),
         line_count=Count("lines", distinct=True),
         counted_count=Count(

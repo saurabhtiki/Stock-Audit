@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% load static %}
 {% load humanize %}
 {% block title %}{{ audit.title }}{% endblock %}
+{% block extra_head %}{# small tables here still sort / download CSV in the browser #}<script defer src="{% static 'js/table_tools.js' %}"></script>{% endblock %}
 {% block content %}
 <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li>{{ audit }}</li></ul></div>
 

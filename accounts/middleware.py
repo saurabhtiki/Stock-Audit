@@ -1,5 +1,6 @@
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.functional import SimpleLazyObject
 
 from accounts.access import user_companies, user_role
 
@@ -40,5 +41,6 @@ class CurrentCompanyMiddleware:
                 request.session[SESSION_COMPANY_KEY] = current.pk
             request.companies = companies
             request.company = current
-            request.role = user_role(request.user, current)
+            # Looked up only when a page shows it (top bar, home), not on every table click.
+            request.role = SimpleLazyObject(lambda: user_role(request.user, current))
         return self.get_response(request)

@@ -1,50 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Activity log{% endblock %}
 {% block content %}
-<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-  <div>
-    <h1 class="text-2xl font-bold">Activity log</h1>
-    <p class="text-sm text-base-content/60">Every change, newest first. Nobody can edit or delete these rows.</p>
-  </div>
-  <form method="get" class="tooltip tooltip-bottom" data-tip="Show changes to one kind of record">
-    <label class="sr-only" for="type-filter">Record type</label>
-    <select id="type-filter" name="type" class="select" onchange="this.form.submit()">
-      <option value="">All records</option>
-      {% for value in record_types %}<option value="{{ value }}" {% if value == record_type %}selected{% endif %}>{{ value }}</option>{% endfor %}
-    </select>
-  </form>
+<div class="mb-4">
+  <h1 class="text-2xl font-bold">Activity log</h1>
+  <p class="text-sm text-base-content/60">Every change, newest first. Nobody can edit or delete these rows.</p>
 </div>
-
-{% if page.object_list %}
-  <div class="overflow-x-auto rounded-box bg-base-100">
-    <table class="table table-sm table-zebra data-table" data-table="activity_log"
-           data-csv-tip="Download the rows on this page as a CSV file (opens in Excel)">
-      <thead><tr><th>When</th><th>Who</th><th>Did</th><th>Record</th><th>Old → new</th></tr></thead>
-      <tbody>
-        {% for entry in page %}
-          <tr>
-            <td class="whitespace-nowrap" data-sort="{{ entry.created_at|date:"c" }}">{{ entry.created_at|date:"d M Y H:i" }}</td>
-            <td>{{ entry.actor.username|default:"system" }}</td>
-            <td><span class="badge badge-ghost">{{ entry.action }}</span></td>
-            <td>{{ entry.record_type }}: {{ entry.record_label }}</td>
-            <td class="text-sm">
-              {% for field, values in entry.changes.items %}
-                <div><span class="font-bold">{{ field }}</span>: {{ values.0|default_if_none:"—" }} → {{ values.1|default_if_none:"—" }}</div>
-              {% empty %}<span class="text-base-content/50">—</span>{% endfor %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% if page.has_other_pages %}
-    <div class="join mt-4">
-      {% if page.has_previous %}<a class="join-item btn btn-outline btn-primary" href="?page={{ page.previous_page_number }}&type={{ record_type|urlencode }}">Newer</a>{% endif %}
-      <span class="join-item btn btn-disabled">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a class="join-item btn btn-outline btn-primary" href="?page={{ page.next_page_number }}&type={{ record_type|urlencode }}">Older</a>{% endif %}
-    </div>
-  {% endif %}
-{% else %}
-  <div role="alert" class="alert alert-soft alert-info"><span>Nothing logged yet.</span></div>
-{% endif %}
+{% include "core/partials/activity_table.html" %}
 {% endblock %}

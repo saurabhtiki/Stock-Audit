@@ -21,6 +21,7 @@ so refresh, Back and shared links all show the same rows.
 import csv
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -32,7 +33,9 @@ from django.db import models
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import StreamingHttpResponse
+from django.shortcuts import render
 from django.utils import timezone
+from django.utils.cache import patch_vary_headers
 from django.utils.functional import cached_property
 
 logger = logging.getLogger(__name__)
@@ -55,6 +58,8 @@ class Column:
     sortable: bool = True
     filterable: bool = True
     csv: bool = True
+    # Optional: how to write the cell in the CSV, given the row (e.g. a dict as readable text).
+    csv_value: Callable | None = None
 
     @property
     def align_right(self) -> bool:
@@ -122,8 +127,10 @@ class DataTable:
         base_url="",
         noun="rows",
         keep=(),
+        default_per_page=PAGE_SIZES[0],
     ):
         self.params = params
+        self.default_per_page = default_per_page
         # Outside settings carried in every link, e.g. the dashboard's Branch / month filters.
         self.keep = tuple(keep)
         self.base_queryset = queryset
@@ -218,7 +225,7 @@ class DataTable:
 
     def _read_per_page(self) -> int:
         raw = self.params.get("per_page", "")
-        return int(raw) if raw.isdecimal() and int(raw) in PAGE_SIZES else PAGE_SIZES[0]
+        return int(raw) if raw.isdecimal() and int(raw) in PAGE_SIZES else self.default_per_page
 
     # ---------- the rows ----------
 
@@ -341,7 +348,8 @@ class DataTable:
             self._filtered_except(skip=column.name)
             .order_by()
             .values(column.name)
-            .annotate(row_count=Count("pk"))
+            # distinct: a row joined to many lines / queries must still count once
+            .annotate(row_count=Count("pk", distinct=True))
         )
         merged: dict = {}
         for row in counts:
@@ -481,9 +489,12 @@ class DataTable:
 
     @staticmethod
     def _csv_cell(column, row) -> str:
+        if column.csv_value:
+            return _csv_text(column.csv_value(row))
         value = getattr(row, column.name)
-        if column.choices and value in column.choices:
-            return _csv_text(str(column.choices[value]))
+        key = str(value) if isinstance(value, bool) else value  # Yes/No columns use "True" keys
+        if column.choices and key in column.choices:
+            return _csv_text(str(column.choices[key]))
         return _csv_text(value)
 
 
@@ -500,4 +511,24 @@ def rows_csv_response(filename: str, headings: list[str], rows) -> StreamingHttp
 
     response = StreamingHttpResponse(lines(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+YES_NO = {"True": "Yes", "False": "No"}
+ACTIVE_INACTIVE = {"True": "Active", "False": "Inactive"}
+
+
+def table_response(request, table, page_template: str, table_template: str, context: dict):
+    """The usual answer for a list page: the CSV, only the table (an htmx click inside it),
+    or the whole page. `context` must already hold the table."""
+    if table.wants_csv:
+        logger.info("%s downloaded CSV of %s", request.user.username, table.table_id)
+        return table.csv_response()
+    is_table_click = (
+        request.headers.get("HX-Request") == "true"
+        and request.headers.get("HX-History-Restore-Request") != "true"
+        and request.headers.get("HX-Target") == table.table_id
+    )
+    response = render(request, table_template if is_table_click else page_template, context)
+    patch_vary_headers(response, ["HX-Request", "HX-Target"])
     return response

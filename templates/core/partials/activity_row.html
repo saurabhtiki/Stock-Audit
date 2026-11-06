@@ -1,0 +1,12 @@
+<tr>
+  <td class="dt-sticky whitespace-nowrap">{{ row.created_at|date:"d M Y H:i" }}</td>
+  <td>{{ row.actor_name }}</td>
+  <td><span class="badge badge-ghost">{{ row.action }}</span></td>
+  <td>{{ row.record_type }}</td>
+  <td>{{ row.record_label }}</td>
+  <td class="text-sm">
+    {% for field, values in row.changes.items %}
+      <div><span class="font-bold">{{ field }}</span>: {{ values.0|default_if_none:"—" }} → {{ values.1|default_if_none:"—" }}</div>
+    {% empty %}<span class="text-base-content/50">—</span>{% endfor %}
+  </td>
+</tr>

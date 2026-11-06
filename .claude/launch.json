@@ -37,6 +37,19 @@
       ],
       "port": 8003,
       "autoPort": false
+    },
+    {
+      "name": "django-dev-8005",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "python",
+        "manage.py",
+        "runserver",
+        "8005"
+      ],
+      "port": 8005,
+      "autoPort": false
     }
   ]
 }

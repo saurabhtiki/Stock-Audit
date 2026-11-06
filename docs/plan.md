@@ -9,7 +9,13 @@ uv run python manage.py create_admin     # real first Admin (any environment)
 uv run python manage.py runserver
 uv run pytest                             # tests
 ```
-Pick the environment with `DJANGO_ENV` (default `development`).
+Pick the environment with `DJANGO_ENV` (default `development`). Full guides:
+- `docs/environments.md`: development / test (dress rehearsal) / production, with PowerShell commands
+- `docs/deploy.md`: putting it on an office Windows PC or a cloud VPS (Waitress + Caddy HTTPS)
+- `docs/pilot-checklist.md`: what to tick during the pilot
+
+Start the app the production way (any environment): `uv run python manage.py serve`.
+After changing CSS classes: `.\tools\build_css.ps1` (rebuilds `static/css/tailwind.css`).
 
 Restore a backup zip (Admin → Backup) on a test PC — the old database and media are kept as
 `*.before-restore-<time>`; refused on production unless `--force`:
@@ -536,3 +542,86 @@ email alerts.
   - A backup is recorded only after the whole zip was sent.
   - Ageing links carry the audit type, and the Queries list gained a Type column.
   - Logged 404s, a shared rights helper, and fewer session writes.
+
+---
+
+## Phase 7 — Pilot polish (DONE — 364 tests pass)
+
+Built notes: the 6 lists use `core/datatable.py` through one helper `table_response()` and one template
+`partials/datatable/list_table.html` (each page has a small `*_table.html` + `*_row.html`). The table got
+`default_per_page` and `Column(csv_value=…)`; tick-list counts now count each row once. Audits list and the
+dashboard status grid share `dashboards.with_progress()`. Local files: `static/vendor/` + `static/css/tailwind.css`
+built from `tools/tailwind.input.css` by `tools/build_css.ps1`. Pytest has its own settings file
+`config/settings/pytest.py` (fast hashing, temp media, no WhiteNoise); `config/settings/test.py` is now the
+manual dress-rehearsal environment. New: `core/management/commands/serve.py` (Waitress), docs
+`environments.md`, `deploy.md`, `pilot-checklist.md`. Tests: `tests/test_phase7.py`, `tests/test_acceptance.py`.
+
+Changed from the plan while building:
+- `table_tools.js` is **kept, but loaded only** on the 3 pages whose small tables still use it (ERP / count-sheet
+  previews, audit page uploads + queries tab). Deleting it would have removed their CSV downloads of error lists.
+- The Google font is **dropped, not copied**: the CSS lists `sans-serif` first, so Atkinson was never shown.
+- Activity log: old and new values are one "Old → new" column (one log row can change several fields).
+  Its text search can't find non-English letters (e.g. ₹) inside old/new values, because the log stores them escaped.
+- The Tailwind tool (`tools/tailwindcss.exe`) is not in git; the small DaisyUI plugin files and the build
+  script in `tools/` are.
+- Code review fixes: "Show cancelled" and "Add Branch / department" now follow filters changed inside the
+  table; `test.py` always uses `data/test.db` + `media/test/`. Left as is: department names that contain a comma
+  show with an extra space.
+- `check --deploy`: HSTS "include subdomains" and "preload" are deliberately off (they affect the whole
+  company domain), so those 2 warnings are silenced with a note in `production.py`.
+
+Goal: get ready for the pilot (one company, two Branches). Every list uses the shared table, the app
+works without internet, the 3 environments are easy to use, and there is a setup guide for a real server.
+No new features for users.
+
+Example: Admin opens **Activity log**, filters user = Ravi and date = Aug, and downloads a CSV with
+all 312 matching rows (today it would hold only one page). The office loses internet, and the app
+still loads with full styles and charts. You try a risky change in **test** first
+(`$env:DJANGO_ENV="test"`) with demo data, then run the same version in **production**.
+
+### Decisions (from grilling — all recommended answers confirmed)
+| # | Decision |
+|---|---|
+| 1 | Scope: (a) move the 6 old lists to the table component, (b) local copies of all CDN files, (c) small review cleanups, (d) pilot-ready check: acceptance tests, setup guide, environments guide. |
+| 2 | Lists that move: **Companies, Branches, Departments, Users, Activity log, Audit list**. Small tables stay (rights grid, upload previews, query page tables, backup log). Then **delete `table_tools.js`**. |
+| 3 | **Activity log**: columns when, user, record type, record, action, old value, new value. Filters: date range, user / record type / action (tick lists), text search. Newest first, **50 rows per page** default. CSV = all matching rows. |
+| 4 | **Audit list**: title, Branch, date, type, stage, lines, total value, % counted, open queries; old filters become column filters; cancelled hidden unless "Show cancelled". **Users list**: username, name, email, department, companies (role), Admin, status; buttons All / Active / Inactive. |
+| 5 | **Tailwind**: build one ready-made CSS file with Tailwind's single-file Windows tool (v4.1.11) + DaisyUI plugin files (v5.0.43). Tool lives in `tools/` (not in git); the built CSS **is** in git, so servers don't need the tool. One command rebuilds it after design changes. |
+| 6 | HTMX 2.0.6, Alpine 3.14.9, Chart.js 4.4.1 and the Atkinson Hyperlegible font (400 / 700, .woff2) saved in `static/vendor/`, same versions as today. Downloads approved. |
+| 7 | **Guard test**: fails if any template loads an `https://` script, stylesheet or font. |
+| 8 | Cleanups: merge the 3 activate/deactivate views (company, branch, department) into one helper; lighter top-bar company/role lookup. Only code we touch. |
+| 9 | **Web server**: **Waitress** everywhere (Windows and Linux). New command `manage.py serve` starts it the same way on any machine. |
+| 10 | `docs/deploy.md`, two paths: **Office Windows PC** (uv, `.env.production`, Windows service via NSSM, Caddy for HTTPS — office-only or real certificate) and **Cloud VPS** (DigitalOcean / Hostinger **VPS**, Ubuntu, systemd, Caddy with free certificate). Hostinger shared hosting can't run it. |
+| 11 | Verified here: `serve` starts and serves pages; `check --deploy` passes with production settings. Not tried live: Windows service, Caddy, VPS — marked so in the guide and listed in the pilot checklist. |
+| 12 | `tests/test_acceptance.py`: one test per acceptance criterion 1–10 (criterion 10 = real backup zip restored into a temp folder). `docs/pilot-checklist.md`: one page to tick by hand during the pilot. |
+| 13 | **Environments**: development = coding (demo data, debug, Django admin); **test = dress rehearsal** (behaves like production, fake data, `data/test.db`); production = real data. **pytest** uses its own throw-away database and temp media folder, never the three above. |
+| 14 | Fixes for test: WhiteNoise on in **every** environment (so test shows styles with debug off); `seed_demo` allowed in development **and test** (never production); pytest media in a temp folder deleted after the run; yellow environment badge stays in the top bar. |
+| 15 | `docs/environments.md`: PowerShell copy-paste commands per environment — start, add demo data, reset to empty, run tests, backup → restore round trip into test. |
+
+### What gets built
+1. **Lists → table component** (`core/datatable.py`): Companies, Branches, Departments, Users, Activity log,
+   Audit list, each with `?export=csv`; table component gets a per-table default page size (Activity log 50).
+   Remove `static/js/table_tools.js` and its hooks in `base.html`.
+2. **Local files**: `static/vendor/` (htmx, alpine, chart.js, fonts + `@font-face` in CSS);
+   `static/css/tailwind.input.css` → built `static/css/tailwind.css`; `tools/build_css.ps1` downloads-check +
+   rebuild command; `tools/` in `.gitignore`. `base.html` and `dashboard.html` point to local files only.
+3. **Cleanups**: one `toggle_active` helper used by company / branch / department views; top-bar lookup trimmed.
+4. **Environments**: WhiteNoise in `base.py`; `seed_demo` allowed in test; pytest `MEDIA_ROOT` → temp folder
+   (fixture in `tests/conftest.py`).
+5. **Server**: `waitress` added; `core/management/commands/serve.py` (host, port, threads; reads env).
+6. **Docs**: `docs/environments.md`, `docs/deploy.md`, `docs/pilot-checklist.md`; "How to run" above updated.
+7. **Tests**: `tests/test_acceptance.py`, guard test for CDN links, tests for the 6 moved lists.
+
+### Not in this phase
+New user features, email alerts, automatic/scheduled backups, PostgreSQL, trying the live server setup from here.
+
+### Tests
+- each moved list: filters, sort, pages, CSV = all matching rows; other company's rows never show
+- Activity log: 50 per page default; filter by user + date; CSV holds every matching row; still read-only
+- Audit list: cancelled hidden by default, shown with "Show cancelled"; % counted / open queries right
+- Users: All / Active / Inactive buttons; Admin-only
+- toggle helper: activate / deactivate still logged and Admin-only for all 3 record types
+- guard: no `https://` script / stylesheet / font in any template; pages render with local files
+- `seed_demo` runs in test, refused in production; pytest never writes into `media/test/`
+- `serve` command starts Waitress (smoke test with a short run); `check --deploy` clean with production settings
+- acceptance criteria 1–10 each pass end-to-end

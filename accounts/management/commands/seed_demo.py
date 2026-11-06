@@ -1,8 +1,10 @@
-"""Demo data for DEVELOPMENT only: uv run python manage.py seed_demo
+"""Demo data for DEVELOPMENT and TEST only: uv run python manage.py seed_demo
 
 Creates 2 companies, 3 Branches, an Admin and a multi-company user.
-All demo logins use the password below (development database only).
+All demo logins use the password below (never on production).
 """
+
+import logging
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -12,16 +14,22 @@ from accounts.rights import Role
 from accounts.rights_service import save_rights
 from core.models import Branch, Company
 
+logger = logging.getLogger(__name__)
+
 DEMO_PASSWORD = "demo-pass-123"
 DEMO_USERS = [("admin", "Asha Admin", True), ("ravi", "Ravi Kumar", False)]
 
 
 class Command(BaseCommand):
-    help = "Fill the development database with demo companies, Branches and users."
+    help = "Fill the development or test database with demo companies, Branches and users."
 
     def handle(self, *args, **options):
-        if settings.DJANGO_ENV != "development":
-            raise CommandError("seed_demo runs only in development (DJANGO_ENV=development).")
+        if settings.DJANGO_ENV not in ("development", "test"):
+            logger.error("seed_demo refused in the %s environment", settings.DJANGO_ENV)
+            raise CommandError(
+                "seed_demo runs only in development or test, never on production "
+                "(set DJANGO_ENV=development or DJANGO_ENV=test)."
+            )
 
         alpha, _ = Company.objects.get_or_create(name="Alpha Traders", defaults={"address": "Pune"})
         beta, _ = Company.objects.get_or_create(name="Beta Stores", defaults={"address": "Nashik"})

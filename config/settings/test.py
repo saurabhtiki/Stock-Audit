@@ -1,13 +1,14 @@
-from .base import *
-from .base import BASE_DIR
+"""The TEST environment: your dress rehearsal. Behaves like production (debug off, real login
+rules) but holds fake data in data/test.db and media/test/. Start it with DJANGO_ENV=test.
+The automatic tests (pytest) use config/settings/pytest.py instead and never touch these."""
 
-DJANGO_ENV = "test"  # also when the DJANGO_ENV variable is not set (pytest)
+from .base import *
+from .base import BASE_DIR, DATABASES
+
+# Set here too, so loading these settings directly (IDE, --settings) can never
+# fall back to the development database or media folder.
+DJANGO_ENV = "test"
+DATABASES["default"]["NAME"] = BASE_DIR / "data" / "test.db"
+MEDIA_ROOT = BASE_DIR / "media" / "test"
 DEBUG = False
 DJANGO_ADMIN_ENABLED = False
-
-# Fast hashing keeps the test run quick. Never use this outside tests.
-PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
-MEDIA_ROOT = BASE_DIR / "media" / "test"
-
-# Uncompressed PDFs so tests can read their text.
-PDF_COMPRESS = 0

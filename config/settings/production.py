@@ -21,9 +21,12 @@ CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").sp
 # The spec needs HTTPS. Set SECURE_SSL_REDIRECT=false only if a proxy already forces HTTPS.
 SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "true").lower() == "true"
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "3600"))
+# Left off on purpose: "include subdomains" and "preload" would force HTTPS on every site of
+# the company's domain, not just this app. Turn them on only if IT agrees.
+SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
 
-# Serve CSS/JS without a separate web server.
-MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+# CSS / JS: the copies made by `manage.py collectstatic`, compressed, with cache-safe names.
+WHITENOISE_USE_FINDERS = False
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},

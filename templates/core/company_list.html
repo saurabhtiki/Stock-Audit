@@ -3,23 +3,7 @@
 {% block content %}
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
   <h1 class="text-2xl font-bold">Companies</h1>
-  <a href="{% url 'core:company_create' %}" class="btn btn-primary">Add company</a>
+  <a href="{% url 'core:company_create' %}" class="btn btn-primary" title="Add a new company to the group">Add company</a>
 </div>
-
-{% if companies %}
-  <div class="overflow-x-auto rounded-box bg-base-100">
-    <table class="table table-zebra data-table" data-table="companies">
-      <thead>
-        <tr><th>Company</th><th>Branches</th><th>Status</th><th class="text-right" data-nosort data-csv-skip>Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for company in companies %}{% include "core/partials/company_row.html" %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <div role="alert" class="alert alert-soft alert-info">
-    <span>No companies yet. Add the first one to start setting up Branches and users.</span>
-  </div>
-{% endif %}
+{% include "core/partials/company_table.html" %}
 {% endblock %}

@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 6 (dashboard with 5 tabs + charts, Admin backup zip, 7-day reminder, restore_backup command) done. Next: plan Phase 7 (pilot polish: move other lists to table component, local CDN copies).
+Phase 7 (pilot polish: 6 lists on table component, local CSS/JS, test env fixed, `serve` + deploy/env guides, acceptance tests) done. Next: run the pilot (docs/pilot-checklist.md), then plan fixes from it.
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

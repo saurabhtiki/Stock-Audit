@@ -1,0 +1,18 @@
+{% load humanize %}
+<tr class="{% if row.stage == 'cancelled' %}opacity-60{% endif %}">
+  <td class="dt-sticky font-bold" title="{{ row.branch.name }}">{{ row.branch_code }}</td>
+  <td><a class="link link-primary font-bold" href="{% url 'audits:audit_detail' row.pk %}" title="Open this audit">{{ row.title }}</a></td>
+  <td class="whitespace-nowrap">{{ row.audit_date|date:"d M Y" }}</td>
+  <td>{% if row.audit_type == "surprise" %}<span class="badge badge-sm badge-warning">Surprise</span>{% else %}Scheduled{% endif %}</td>
+  <td>{% include "audits/partials/stage_badge.html" with audit=row %}</td>
+  <td class="text-right">{{ row.line_count|intcomma }}</td>
+  <td class="text-right">{{ row.total_value|default:0|floatformat:2|intcomma }}</td>
+  <td class="text-right">
+    {% if row.line_count %}
+      <div class="flex items-center justify-end gap-2" title="{{ row.counted_count|intcomma }} of {{ row.line_count|intcomma }} lines counted">
+        <progress class="progress progress-primary hidden w-16 sm:block" value="{{ row.pct_counted }}" max="100"></progress>{{ row.pct_counted }}%
+      </div>
+    {% else %}–{% endif %}
+  </td>
+  <td class="text-right">{% if row.open_queries %}<span class="badge badge-sm badge-error" title="Queries raised in this audit that are not Closed">{{ row.open_queries }}</span>{% else %}0{% endif %}</td>
+</tr>

@@ -1,32 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Departments{% endblock %}
 {% block content %}
-<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+<div class="mb-4">
   <h1 class="text-2xl font-bold">Departments</h1>
-  <div class="flex flex-wrap gap-2">
-    <form method="get" class="tooltip tooltip-bottom" data-tip="Show departments of one company">
-      <label class="sr-only" for="company-filter">Company</label>
-      <select id="company-filter" name="company" class="select" onchange="this.form.submit()">
-        <option value="">All companies</option>
-        {% for company in companies %}
-          <option value="{{ company.pk }}" {% if company_id == company.pk|stringformat:"s" %}selected{% endif %}>{{ company.name }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    <a href="{% url 'core:department_create' %}{% if company_id %}?company={{ company_id }}{% endif %}" class="btn btn-primary">Add department</a>
-  </div>
 </div>
-
-{% if departments %}
-  <div class="overflow-x-auto rounded-box bg-base-100">
-    <table class="table table-zebra data-table" data-table="departments">
-      <thead><tr><th>Department</th><th>Company</th><th>Status</th><th class="text-right" data-nosort data-csv-skip>Actions</th></tr></thead>
-      <tbody>
-        {% for department in departments %}{% include "core/partials/department_row.html" %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <div role="alert" class="alert alert-soft alert-info"><span>No departments here yet. Use “Add department” to create one.</span></div>
-{% endif %}
+{% include "core/partials/department_table.html" %}
 {% endblock %}

@@ -1,0 +1,23 @@
+<tr class="{% if not row.is_active %}opacity-60{% endif %}">
+  <td class="dt-sticky">
+    <div class="flex items-center gap-2">
+      {% include "partials/avatar.html" with person=row size="w-8" %}
+      <span class="font-bold">{{ row.username }}</span>
+    </div>
+  </td>
+  <td>{{ row.full_name }}</td>
+  <td class="text-sm">{{ row.email }}</td>
+  <td class="text-sm">{{ row.departments|default:"–" }}</td>
+  <td>
+    {% for m in row.memberships.all %}
+      <span class="badge badge-sm badge-soft badge-primary {% if not m.is_active %}line-through{% endif %}" title="{% if m.is_active %}Role in this company{% else %}Access to this company is switched off{% endif %}">{{ m.company.name }}: {{ m.get_role_display }}</span>{% if not forloop.last %}<span class="sr-only">; </span>{% endif %}
+    {% empty %}{% if not row.is_admin %}<span class="text-sm text-base-content/50">No company yet</span>{% endif %}{% endfor %}
+  </td>
+  <td>{% if row.is_admin %}<span class="badge badge-sm badge-primary" title="Group-wide Admin: manages all companies and users">Admin</span>{% else %}–{% endif %}</td>
+  <td class="whitespace-nowrap">
+    {% if row.is_active %}<span class="badge badge-soft badge-success">Active</span>
+    {% else %}<span class="badge badge-soft">Deactivated</span>{% endif %}
+    {% if row.is_login_locked %}<span class="tooltip" data-tip="Too many wrong passwords. Resetting the password unlocks it."><span class="badge badge-soft badge-warning">Locked</span></span>{% endif %}
+  </td>
+  <td class="text-right"><a class="btn btn-sm btn-outline btn-primary" href="{% url 'accounts:user_detail' row.pk %}" title="See and change this user's details, companies and rights">Open</a></td>
+</tr>

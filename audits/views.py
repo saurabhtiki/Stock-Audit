@@ -1,5 +1,4 @@
 import logging
-from datetime import date
 
 from django.contrib import messages
 from django.db import transaction
@@ -13,7 +12,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from accounts.access import visible_branches
-from audits import counting, erp_import
+from audits import counting, dashboards, erp_import
 from audits.count_views import attach_remark_counts
 from audits.forms import AuditForm, CancelForm, FreezeForm, ItemForm, UploadForm
 from audits.models import Audit, AuditLine, ErpUpload, Item
@@ -37,7 +36,7 @@ from audits.permissions import (
 )
 from audits.queries import queries_for_audit
 from core.activity import diff, log_activity, snapshot
-from core.datatable import CHOICE, NUMBER, Column, DataTable
+from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable, table_response
 
 logger = logging.getLogger(__name__)
 
@@ -62,36 +61,44 @@ def _vary_on_htmx(response):
 # ---------- Audit list / create / edit ----------
 
 
+AUDIT_LIST_COLUMNS = [
+    Column("branch_code", "Branch", type=CHOICE),
+    Column("title", "Audit"),
+    Column("audit_date", "Audit date", type=DATE),
+    Column("audit_type", "Type", type=CHOICE, choices=dict(Audit.Type.choices)),
+    Column("stage", "Stage", type=CHOICE, choices=dict(Audit.Stage.choices)),
+    Column("line_count", "Lines", type=NUMBER),
+    Column("total_value", "ERP value", type=NUMBER),
+    Column("pct_counted", "% counted", type=NUMBER),
+    Column("open_queries", "Open queries", type=NUMBER),
+]
+
+
 def audit_list(request):
     branches = visible_branches(request.user, request.company)
-    audits = (
-        Audit.objects.filter(branch__in=branches)
-        .select_related("branch")
-        .annotate(line_count=Count("lines"), total_value=Sum("lines__erp_value"))
+    show_cancelled = request.GET.get("cancelled") == "1"
+    audits = Audit.objects.filter(branch__in=branches).select_related("branch")
+    if not show_cancelled:
+        audits = audits.exclude(stage=Audit.Stage.CANCELLED)
+    table = DataTable(
+        request.GET,
+        dashboards.with_progress(audits).annotate(total_value=dashboards.erp_value_of_audit()),
+        AUDIT_LIST_COLUMNS,
+        table_id="audit-table",
+        default_sort=("-audit_date", "branch__code", "title"),
+        search_fields=("title", "branch__code", "branch__name"),
+        search_placeholder="Search audit title or Branch",
+        base_url=request.path,
+        noun="audits",
+        keep=("cancelled",),
     )
-    filters = {key: request.GET.get(key, "") for key in ("branch", "stage", "type", "from", "to")}
-    if filters["branch"].isdigit():
-        audits = audits.filter(branch_id=filters["branch"])
-    if filters["stage"] in Audit.Stage.values:
-        audits = audits.filter(stage=filters["stage"])
-    if filters["type"] in Audit.Type.values:
-        audits = audits.filter(audit_type=filters["type"])
-    for key, lookup in (("from", "audit_date__gte"), ("to", "audit_date__lte")):
-        try:
-            audits = audits.filter(**{lookup: date.fromisoformat(filters[key])})
-        except ValueError:
-            filters[key] = ""
-    return render(
-        request,
-        "audits/audit_list.html",
-        {
-            "audits": audits,
-            "branches": branches,
-            "filters": filters,
-            "stages": Audit.Stage.choices,
-            "types": Audit.Type.choices,
-            "can_create": bool(branches_with_right(request.user, request.company, "upload_erp")),
-        },
+    context = {
+        "table": table,
+        "show_cancelled": show_cancelled,
+        "can_create": bool(branches_with_right(request.user, request.company, "upload_erp")),
+    }
+    return table_response(
+        request, table, "audits/audit_list.html", "audits/partials/audit_table.html", context
     )
 
 

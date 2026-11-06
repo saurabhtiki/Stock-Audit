@@ -9,6 +9,6 @@
   Shows only Branches where you have the “View reports” right. The filters apply to every tab, and each table can be downloaded as CSV.
 </p>
 <div id="dashboard">{% include "audits/partials/dashboard_body.html" %}</div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/chart-4.4.1.umd.min.js' %}"></script>
 <script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}

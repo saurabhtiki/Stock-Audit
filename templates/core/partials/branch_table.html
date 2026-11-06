@@ -1,0 +1,6 @@
+{% comment %}hx-swap-oob: when only the table reloads (htmx), this button is replaced too, so it
+  pre-fills the company picked in the Company filter.{% endcomment %}
+<div id="branch-add" class="mb-2 flex justify-end" hx-swap-oob="true">
+  <a href="{% url 'core:branch_create' %}{% if company_id %}?company={{ company_id }}{% endif %}" class="btn btn-primary" title="Add a Branch to a company">Add Branch</a>
+</div>
+{% include "partials/datatable/list_table.html" with row_template="core/partials/branch_row.html" actions_heading=True empty_text="No Branches yet. Use “Add Branch” to create one." %}

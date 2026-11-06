@@ -59,7 +59,7 @@ def test_admin_picks_department_for_a_user_in_a_company(admin_client, ravi, comp
     entry = ActivityLog.objects.filter(record_type="Membership", action="update").latest("pk")
     assert entry.changes["department"] == [None, "Stores"]
     page = admin_client.get(reverse("accounts:user_list")).content.decode()
-    assert "(Stores)" in page
+    assert '<td class="text-sm">Stores</td>' in page  # its own Department column
 
 
 @pytest.mark.django_db
@@ -175,7 +175,8 @@ def test_pages_have_theme_toggle_and_table_tools(admin_client, company_a, branch
         assert 'id="theme-toggle"' in page and "js/theme.js" in page, name
     for name in ["core:company_list", "core:branch_list", "accounts:user_list"]:
         page = admin_client.get(reverse(name)).content.decode()
-        assert "data-table=" in page and "js/table_tools.js" in page, name
+        # the shared server-side table (Phase 7), not the old in-browser table_tools.js
+        assert "dt-funnel" in page and "js/table_tools.js" not in page, name
 
 
 @pytest.mark.django_db

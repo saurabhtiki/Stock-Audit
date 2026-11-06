@@ -165,7 +165,12 @@ def test_activity_log_cannot_be_changed_or_deleted(admin_user, company_a):
 def test_user_search_htmx_returns_rows_only(admin_client):
     make_user("ravi")
     make_user("sita")
-    response = admin_client.get(reverse("accounts:user_list"), {"q": "rav"}, HTTP_HX_REQUEST="true")
+    response = admin_client.get(
+        reverse("accounts:user_list"),
+        {"q": "rav"},
+        HTTP_HX_REQUEST="true",
+        HTTP_HX_TARGET="user-table",
+    )
     page = response.content.decode()
     assert "ravi@example.com" in page and "sita" not in page and "<html" not in page
 

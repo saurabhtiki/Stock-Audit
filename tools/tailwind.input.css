@@ -1,0 +1,10 @@
+/* Source for static/css/tailwind.css — do not link this file from pages.
+   Rebuild after changing classes in templates, JS or Python:  .\tools\build_css.ps1
+   Tailwind scans the folders below for class names and keeps only the ones used. */
+@import "tailwindcss" source(none);
+@source "../templates";
+@source "../static/js";
+@source "../accounts/**/*.py";
+@source "../audits/**/*.py";
+@source "../core/**/*.py";
+@plugin "./daisyui.mjs";

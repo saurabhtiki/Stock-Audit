@@ -3,7 +3,8 @@
 import logging
 
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Aggregate, CharField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Concat, Replace
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -18,6 +19,7 @@ from accounts.models import Membership, User
 from accounts.rights import RIGHT_NAMES, RIGHTS, Role
 from accounts.rights_service import copy_rights, rights_grid, save_rights
 from core.activity import diff, log_activity, snapshot
+from core.datatable import CHOICE, YES_NO, Column, DataTable, table_response
 from core.models import Department
 from core.permissions import admin_required
 
@@ -26,19 +28,82 @@ logger = logging.getLogger(__name__)
 USER_FIELDS = ["username", "full_name", "email", "is_admin", "is_active"]
 
 
+class GroupConcat(Aggregate):
+    """SQLite GROUP_CONCAT: many values joined into one text, e.g. "Stores,Finance"."""
+
+    function = "GROUP_CONCAT"
+    allow_distinct = True
+    output_field = CharField()
+
+
+def _membership_text(expression, distinct=False):
+    """One text per user built from their company memberships (a subquery, so the user rows
+    are not multiplied and the column can be filtered and sorted like a normal one)."""
+    return Subquery(
+        Membership.objects.filter(user=OuterRef("pk"))
+        .order_by()
+        .values("user")
+        .annotate(text=GroupConcat(expression, distinct=distinct))
+        .values("text"),
+        output_field=CharField(),
+    )
+
+
+def _companies_csv(user) -> str:
+    return "; ".join(
+        f"{m.company.name}: {m.get_role_display()}"
+        + (f" ({m.department.name})" if m.department else "")
+        + ("" if m.is_active else " – inactive")
+        for m in user.memberships.all()
+    )
+
+
+USER_STATUS = {"True": "Active", "False": "Deactivated"}
+USER_COLUMNS = [
+    Column("username", "Username"),
+    Column("full_name", "Name"),
+    Column("email", "Email"),
+    Column("departments", "Department"),
+    Column("companies", "Companies (role)", csv_value=_companies_csv),
+    Column("is_admin", "Admin", type=CHOICE, choices=YES_NO),
+    Column("is_active", "Status", type=CHOICE, choices=USER_STATUS),
+]
+USER_SHORTCUTS = (
+    ("All", "is_active", "", "Show every user"),
+    ("Active", "is_active", "True", "Show only users who can log in"),
+    ("Inactive", "is_active", "False", "Show only deactivated users"),
+)
+
+
 @admin_required
 def user_list(request):
-    users = User.objects.prefetch_related("memberships__company")
-    search = request.GET.get("q", "").strip()
-    if search:
-        users = users.filter(
-            Q(username__icontains=search)
-            | Q(full_name__icontains=search)
-            | Q(email__icontains=search)
-        )
-    is_htmx = request.headers.get("HX-Request") == "true"
-    template = "accounts/partials/user_rows.html" if is_htmx else "accounts/user_list.html"
-    return render(request, template, {"users": users, "search": search})
+    users = User.objects.prefetch_related(
+        "memberships__company", "memberships__department"
+    ).annotate(
+        departments=Replace(  # "Finance,Stores" → "Finance, Stores"
+            _membership_text("department__name", distinct=True), Value(","), Value(", ")
+        ),
+        companies=_membership_text(Concat("company__name", Value(": "), "role")),
+    )
+    table = DataTable(
+        request.GET,
+        users,
+        USER_COLUMNS,
+        table_id="user-table",
+        default_sort=("username",),
+        search_fields=("username", "full_name", "email"),
+        search_placeholder="Search name, username or email",
+        shortcuts=USER_SHORTCUTS,
+        base_url=request.path,
+        noun="users",
+    )
+    return table_response(
+        request,
+        table,
+        "accounts/user_list.html",
+        "accounts/partials/user_table.html",
+        {"table": table},
+    )
 
 
 @admin_required

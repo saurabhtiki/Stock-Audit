@@ -7,3 +7,4 @@ data/
 media/
 staticfiles/
 .env.production
+tools/tailwindcss*.exe
