@@ -92,6 +92,10 @@ class Audit(models.Model):
     )
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancel_reason = models.TextField(blank=True)
+    checking_done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    checking_done_at = models.DateTimeField(null=True, blank=True)
 
     objects = NoDeleteQuerySet.as_manager()
 
@@ -115,6 +119,16 @@ class Audit(models.Model):
     @property
     def is_draft(self) -> bool:
         return self.stage == self.Stage.ERP_DRAFT
+
+    @property
+    def is_counting(self) -> bool:
+        """Counts can be entered or changed (ERP Frozen, before Checking Done)."""
+        return self.stage == self.Stage.ERP_FROZEN
+
+    @property
+    def remarks_open(self) -> bool:
+        """Remarks can be added or changed (after freezing, until Locked)."""
+        return self.stage in (self.Stage.ERP_FROZEN, self.Stage.CHECKING_DONE)
 
     @property
     def current_upload(self):
@@ -158,7 +172,17 @@ class ErpUpload(models.Model):
 
 
 class AuditLine(models.Model):
-    """One ERP stock line of an audit. Description, UoM and rate are copied from the file."""
+    """One ERP stock line of an audit. Description, UoM and rate are copied from the file.
+
+    After freezing, the auditor fills `physical_qty`; variance and status are worked out
+    from it (see audits.counting) and stored so the table can filter and sort on them.
+    """
+
+    class Status(models.TextChoices):
+        NOT_COUNTED = "not_counted", "Not counted"
+        OK = "ok", "OK"
+        EXCESS = "excess", "Excess"
+        SHORTAGE = "shortage", "Shortage"
 
     audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="lines")
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="audit_lines")
@@ -169,11 +193,110 @@ class AuditLine(models.Model):
     rate = models.DecimalField("rate p.u.", max_digits=14, decimal_places=2)
     erp_value = models.DecimalField("ERP value", max_digits=18, decimal_places=2)
 
+    physical_qty = models.DecimalField(
+        "physical qty", max_digits=14, decimal_places=3, null=True, blank=True
+    )
+    variance_qty = models.DecimalField(
+        "variance qty", max_digits=15, decimal_places=3, null=True, blank=True
+    )
+    variance_value = models.DecimalField(
+        "variance value", max_digits=19, decimal_places=2, null=True, blank=True
+    )
+    count_status = models.CharField(
+        "status", max_length=20, choices=Status.choices, default=Status.NOT_COUNTED, db_index=True
+    )
+    counted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    counted_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["item_code"]
+        verbose_name = "audit line"
         constraints = [
             models.UniqueConstraint(fields=["audit", "item"], name="unique_item_per_audit")
         ]
 
     def __str__(self) -> str:
         return f"{self.audit} – {self.item_code}"
+
+
+class Remark(models.Model):
+    """A note on one audit line, or on the whole audit (line empty). Never really deleted."""
+
+    audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="remarks")
+    line = models.ForeignKey(
+        AuditLine, null=True, blank=True, on_delete=models.PROTECT, related_name="remarks"
+    )
+    text = models.TextField(max_length=1000)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        where = self.line.item_code if self.line_id else "general"
+        return f"{self.audit} – remark on {where}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Remarks are never deleted. Mark them deleted instead.")
+
+
+class CountUpload(models.Model):
+    """One checked count sheet. The file is never stored; checked rows wait here until Confirm."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Not confirmed"
+        USED = "used", "Saved"
+
+    audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="count_uploads")
+    rows = models.JSONField(default=list, blank=True)
+    original_name = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at", "-id"]
+        verbose_name = "count sheet upload"
+
+    def __str__(self) -> str:
+        return f"{self.audit} – {self.original_name}"
+
+
+class Query(models.Model):
+    """Raised at Checking Done for each Excess / Shortage line. Replies come in Phase 4."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+
+    audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="queries")
+    line = models.OneToOneField(AuditLine, on_delete=models.PROTECT, related_name="query")
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="queries")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["line__item_code"]
+        verbose_name_plural = "queries"
+
+    def __str__(self) -> str:
+        return f"Query on {self.line}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Queries are never deleted.")

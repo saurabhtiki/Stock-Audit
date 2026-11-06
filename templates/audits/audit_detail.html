@@ -13,7 +13,9 @@
   <div class="flex flex-wrap gap-2">
     {% if can_edit %}<span class="tooltip tooltip-bottom" data-tip="Change title, dates or type (only while ERP Draft)"><a href="{% url 'audits:audit_edit' audit.pk %}" class="btn btn-outline btn-primary">Edit</a></span>{% endif %}
     {% if can_freeze %}<span class="tooltip tooltip-bottom" data-tip="Set tolerance and lock the ERP lines so counting can start"><a href="{% url 'audits:audit_freeze' audit.pk %}" class="btn btn-primary">Tolerance &amp; freeze</a></span>{% endif %}
-    {% if can_cancel %}<span class="tooltip tooltip-bottom" data-tip="Cancel this audit with a reason. Nothing is deleted."><a href="{% url 'audits:audit_cancel' audit.pk %}" class="btn btn-outline btn-error">Cancel audit</a></span>{% endif %}
+    {% if can_count %}<span class="tooltip tooltip-bottom" data-tip="Close counting and raise queries for Excess / Shortage lines. You see a summary first."><a href="{% url 'audits:checking_done' audit.pk %}" class="btn btn-primary">Checking Done</a></span>{% endif %}
+    {% if can_cancel %}<span class="tooltip tooltip-bottom" data-tip="Cancel this audit with a reason. Nothing is deleted."><a href="{% url 'audits:audit_cancel' audit.pk %}" class="btn btn-outline btn-error">Cancel audit</a></span>
+    {% elif cancel_blocked %}<span class="tooltip tooltip-bottom" data-tip="Counting has started (some lines have a Physical Qty), so this audit can no longer be cancelled."><button type="button" class="btn btn-outline btn-error btn-disabled" aria-disabled="true" tabindex="-1">Cancel audit</button></span>{% endif %}
   </div>
 </div>
 
@@ -42,6 +44,35 @@
   </div>
 </div>
 
+{% if audit.checking_done_at %}
+  <div role="alert" class="alert alert-soft alert-info mb-4">
+    <span>Checking Done by {{ audit.checking_done_by.full_name }} on {{ audit.checking_done_at|date:"d M Y H:i" }}. Counts are fixed; remarks can still be changed until the audit is Locked.</span>
+  </div>
+{% endif %}
+
+{% if summary %}{% include "audits/partials/count_stats.html" %}{% endif %}
+
+{% if can_count %}
+  <div class="card mb-4 bg-base-100">
+    <div class="card-body gap-3">
+      <h2 class="card-title">Count</h2>
+      <p class="text-sm text-base-content/70">
+        Type each Physical Qty in the table below; it saves on Enter or when you click outside the box.
+        Counting offline? Download the count sheet (it has no ERP Qty), fill the Physical Qty column, and upload it.
+        Blank cells never overwrite a count already entered.
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="tooltip" data-tip="Excel list of all items with an empty Physical Qty column and a Remark column"><a href="{% url 'audits:count_sheet' audit.pk %}" class="btn btn-outline btn-primary">Download count sheet</a></span>
+        <form method="post" action="{% url 'audits:count_sheet_upload' audit.pk %}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
+          {% csrf_token %}
+          <span class="tooltip" data-tip="The filled count sheet (.xlsx or .csv). You see a preview first; nothing is saved until you confirm."><input type="file" name="file" accept=".xlsx,.csv" required class="file-input" aria-label="Filled count sheet"></span>
+          <button type="submit" class="btn btn-primary">Check sheet</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
 {% if can_upload %}
   <div class="card mb-4 bg-base-100">
     <form method="post" action="{% url 'audits:erp_upload' audit.pk %}" enctype="multipart/form-data" class="card-body gap-3">
@@ -59,14 +90,32 @@
   </div>
 {% endif %}
 
-<section class="mb-6">
-  <h2 class="mb-2 text-lg font-bold">ERP lines</h2>
-  {% include "audits/partials/audit_lines.html" %}
-</section>
+{# Tabs: plain radio inputs, no JS. htmx swaps inside a tab keep that tab open. #}
+<div class="tabs tabs-lift mb-6">
+  <label class="tab gap-2" title="{% if counting_view %}Every ERP line with its count, variance and remarks{% else %}The ERP stock lines of this audit{% endif %}">
+    <input type="radio" name="audit_tabs" checked aria-label="{% if counting_view %}Lines and counts{% else %}ERP lines{% endif %}">
+    {% if counting_view %}Lines and counts{% else %}ERP lines{% endif %}
+  </label>
+  <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+    {% include "audits/partials/audit_lines.html" %}
+  </div>
 
-{% if uploads %}
-  <section>
-    <h2 class="mb-2 text-lg font-bold">Uploaded files</h2>
+  {% if counting_view %}
+    <label class="tab gap-2" title="Notes about the whole audit, not one item">
+      <input type="radio" name="audit_tabs" aria-label="General remarks">
+      General remarks
+    </label>
+    <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+      <div hx-get="{% url 'audits:remark_panel' audit.pk %}" hx-trigger="load" hx-swap="innerHTML"><span class="loading loading-dots loading-sm"></span></div>
+    </div>
+  {% endif %}
+
+  {% if uploads %}
+    <label class="tab gap-2" title="ERP files uploaded for this audit, and which one is in use">
+      <input type="radio" name="audit_tabs" aria-label="Uploaded files">
+      Uploaded files <span class="badge badge-sm badge-ghost">{{ uploads|length }}</span>
+    </label>
+    <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm data-table" data-table="audit-uploads" data-filter="off">
         <thead><tr><th>File</th><th>Status</th><th>Uploaded by</th><th>When</th><th class="text-right">Lines</th><th class="text-right">Value</th></tr></thead>
@@ -91,6 +140,17 @@
         </tbody>
       </table>
     </div>
-  </section>
+    </div>
+  {% endif %}
+</div>
+
+{% if counting_view %}
+  <dialog id="remark-dialog" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box">
+      <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close" title="Close">✕</button></form>
+      <div id="remark-dialog-body"></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 {% endif %}
 {% endblock %}

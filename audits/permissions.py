@@ -56,10 +56,16 @@ def can_edit_audit(user, audit: Audit) -> bool:
 
 
 def can_cancel_audit(user, audit: Audit) -> bool:
-    """Admin at Draft or Frozen (nothing counted yet); creator only their own Draft."""
+    """Admin at Draft, or at Frozen while nothing is counted; creator only their own Draft."""
     if user.is_admin:
-        return audit.stage in (Audit.Stage.ERP_DRAFT, Audit.Stage.ERP_FROZEN)
+        if audit.stage == Audit.Stage.ERP_FROZEN:
+            return not has_counts(audit)
+        return audit.is_draft
     return can_edit_audit(user, audit)
+
+
+def has_counts(audit: Audit) -> bool:
+    return audit.lines.filter(physical_qty__isnull=False).exists()
 
 
 def can_upload(user, audit: Audit) -> bool:
@@ -68,3 +74,20 @@ def can_upload(user, audit: Audit) -> bool:
 
 def can_freeze(user, audit: Audit) -> bool:
     return audit.is_draft and has_right(user, audit.branch, "set_tolerance_freeze")
+
+
+def can_count(user, audit: Audit) -> bool:
+    """Enter counts, upload the count sheet, mark Checking Done: ERP Frozen + Count right."""
+    return audit.is_counting and has_right(user, audit.branch, "count_and_remarks")
+
+
+def can_remark(user, audit: Audit) -> bool:
+    """Add remarks: from freezing until Locked, with the Count right."""
+    return audit.remarks_open and has_right(user, audit.branch, "count_and_remarks")
+
+
+def can_change_remark(user, remark) -> bool:
+    """Only the writer edits or deletes, and only until the audit is Locked."""
+    return (
+        not remark.is_deleted and remark.created_by_id == user.pk and can_remark(user, remark.audit)
+    )

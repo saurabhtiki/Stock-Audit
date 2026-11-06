@@ -4,9 +4,9 @@
   color-scheme: light;
   --color-base-100: #ffffff;
   --color-base-200: #eef1f4;
-  --color-base-300: #d9dee5;
+  --color-base-300: #6cf86e;
   --color-base-content: #1b2430;
-  --color-primary: #1e4d8c;
+  --color-primary:  #695de8;
   --color-primary-content: #ffffff;
   --color-secondary: #0e7490;
   --color-secondary-content: #ffffff;
@@ -30,19 +30,21 @@
   --border: 1px;
   --depth: 0;
   --noise: 0;
+  --color-card: #ffffff;
+  --color-border: #e5e7eb;
 }
 
 [data-theme="stockaudit-dark"] {
   color-scheme: dark;
   --color-base-100: #1b2431;
   --color-base-200: #131a24;
-  --color-base-300: #2b3646;
+  --color-base-300: #5ebe60;
   --color-base-content: #e4e9f0;
-  --color-primary: #3f72b8;
+  --color-primary: #6158cd;
   --color-primary-content: #ffffff;
   --color-secondary: #22a3c4;
   --color-secondary-content: #04161c;
-  --color-accent: #f2a900;
+  --color-accent: #f2ea00d6;
   --color-accent-content: #1b2430;
   --color-neutral: #0e141c;
   --color-neutral-content: #dfe5ec;
@@ -50,7 +52,7 @@
   --color-info-content: #0b1220;
   --color-success: #3fa66b;
   --color-success-content: #06130c;
-  --color-warning: #f2a900;
+  --color-warning: #f6af08;
   --color-warning-content: #1b2430;
   --color-error: #e5574f;
   --color-error-content: #1a0605;
@@ -83,7 +85,7 @@ body {
 .app-header .select { color: var(--color-base-content); }
 
 /* Cards: thin border and a coloured top edge so they stand out from the page. */
-.card { border: 1px solid var(--color-base-300); border-top: 3px solid var(--color-primary); }
+.card { border: 1px solid var(--color-base-300); border-top: 3px solid var(--color-base-300); }
 
 /* Tables: coloured heading row, click-to-sort arrows. */
 .data-table thead th {

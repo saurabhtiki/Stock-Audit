@@ -3,7 +3,7 @@ from datetime import date
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Case, CharField, Count, Q, Sum, Value, When
+from django.db.models import Case, CharField, Count, F, Q, Sum, Value, When
 from django.http import HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -13,18 +13,22 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from accounts.access import visible_branches
-from audits import erp_import
+from audits import counting, erp_import
+from audits.count_views import attach_remark_counts
 from audits.forms import AuditForm, CancelForm, FreezeForm, ItemForm, UploadForm
-from audits.models import Audit, ErpUpload, Item
+from audits.models import Audit, AuditLine, ErpUpload, Item
 from audits.permissions import (
     branches_with_right,
     can_cancel_audit,
+    can_count,
     can_edit_audit,
     can_freeze,
     can_manage_items,
+    can_remark,
     can_upload,
     forbidden,
     get_visible_audit,
+    has_counts,
 )
 from core.activity import diff, log_activity, snapshot
 from core.datatable import CHOICE, NUMBER, Column, DataTable
@@ -136,17 +140,39 @@ LINE_COLUMNS = [
     Column("rate", "Rate p.u.", type=NUMBER),
     Column("erp_value", "ERP value", type=NUMBER),
 ]
+COUNT_COLUMNS = LINE_COLUMNS + [
+    Column("physical_qty", "Physical Qty", type=NUMBER),
+    # Shown next to Physical Qty; filled per page by attach_remark_counts, so no sort/filter/CSV.
+    Column("remark_count", "Remarks", sortable=False, filterable=False, csv=False),
+    Column("variance_qty", "Variance", type=NUMBER),
+    Column("variance_value", "Var. value", type=NUMBER),
+    Column("count_status", "Status", type=CHOICE, choices=dict(AuditLine.Status.choices)),
+    Column("counter", "Counted by", type=CHOICE),
+]
+COUNT_SHORTCUTS = [
+    ("All", "count_status", "", "Show every line"),
+    ("Not counted", "count_status", "not_counted", "Lines with no Physical Qty yet"),
+    ("Excess", "count_status", "excess", "Counted more than ERP, beyond tolerance"),
+    ("Shortage", "count_status", "shortage", "Counted less than ERP, beyond tolerance"),
+    ("OK", "count_status", "ok", "Counted, and the difference is within tolerance"),
+]
+COUNT_STAGES = (Audit.Stage.ERP_FROZEN, Audit.Stage.CHECKING_DONE, Audit.Stage.LOCKED)
 
 
 def _lines_table(request, audit) -> DataTable:
+    counting_view = audit.stage in COUNT_STAGES
+    lines = audit.lines.all()
+    if counting_view:
+        lines = lines.select_related("counted_by").annotate(counter=F("counted_by__full_name"))
     return DataTable(
         request.GET,
-        audit.lines.all(),
-        LINE_COLUMNS,
+        lines,
+        COUNT_COLUMNS if counting_view else LINE_COLUMNS,
         table_id="audit-lines",
         default_sort=("pk",),
         search_fields=("item_code", "description"),
         search_placeholder="Search item code or description",
+        shortcuts=COUNT_SHORTCUTS if counting_view else (),
         base_url=request.path,
         noun="lines",
     )
@@ -157,12 +183,25 @@ def audit_detail(request, pk):
     table = _lines_table(request, audit)
     if table.wants_csv:
         return table.csv_response(f"{audit.title}_erp_lines_{timezone.localdate().isoformat()}.csv")
+    user = request.user
+    rights = {
+        "can_count": can_count(user, audit),
+        "can_remark": can_remark(user, audit),
+        "counting_view": audit.stage in COUNT_STAGES,
+    }
+    if rights["counting_view"]:
+        table.page.object_list = list(table.page.object_list)
+        attach_remark_counts(table.page.object_list)
     if _is_htmx(request):
         return _vary_on_htmx(
-            render(request, "audits/partials/audit_lines.html", {"audit": audit, "table": table})
+            render(
+                request,
+                "audits/partials/audit_lines.html",
+                {"audit": audit, "table": table, **rights},
+            )
         )
     totals = audit.lines.aggregate(count=Count("id"), value=Sum("erp_value"))
-    user = request.user
+    can_cancel = can_cancel_audit(user, audit)
     return _vary_on_htmx(
         render(
             request,
@@ -171,12 +210,20 @@ def audit_detail(request, pk):
                 "audit": audit,
                 "table": table,
                 "totals": totals,
+                "summary": counting.count_summary(audit) if rights["counting_view"] else None,
                 "uploads": audit.uploads.select_related("uploaded_by"),
                 "upload_form": UploadForm(),
                 "can_edit": can_edit_audit(user, audit),
                 "can_upload": can_upload(user, audit),
                 "can_freeze": can_freeze(user, audit) and totals["count"] > 0,
-                "can_cancel": can_cancel_audit(user, audit),
+                "can_cancel": can_cancel,
+                "cancel_blocked": (
+                    not can_cancel
+                    and user.is_admin
+                    and audit.stage == Audit.Stage.ERP_FROZEN
+                    and has_counts(audit)
+                ),
+                **rights,
             },
         )
     )
@@ -329,22 +376,30 @@ def audit_cancel(request, pk):
     if not can_cancel_audit(request.user, audit):
         return forbidden(
             request,
-            "Admin can cancel an audit in ERP Draft or ERP Frozen; the creator only in ERP Draft.",
+            "Admin can cancel an audit in ERP Draft, or in ERP Frozen before anything is counted; "
+            "the creator only in ERP Draft.",
         )
     form = CancelForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        old_stage = audit.stage
-        audit.stage = Audit.Stage.CANCELLED
-        audit.cancelled_by = request.user
-        audit.cancelled_at = timezone.now()
-        audit.cancel_reason = form.cleaned_data["reason"]
-        audit.save(update_fields=["stage", "cancelled_by", "cancelled_at", "cancel_reason"])
-        log_activity(
-            request.user,
-            "cancel",
-            audit,
-            {"stage": [old_stage, audit.stage], "reason": [None, audit.cancel_reason]},
-        )
+        with transaction.atomic():
+            # Locked so a count saved at the same moment can't slip in after the check.
+            audit = Audit.objects.select_for_update().select_related("branch").get(pk=audit.pk)
+            if not can_cancel_audit(request.user, audit):
+                logger.info("Cancel of audit %s refused: stage or counts changed", audit.pk)
+                messages.error(request, "This audit can no longer be cancelled (counting started).")
+                return redirect("audits:audit_detail", pk=audit.pk)
+            old_stage = audit.stage
+            audit.stage = Audit.Stage.CANCELLED
+            audit.cancelled_by = request.user
+            audit.cancelled_at = timezone.now()
+            audit.cancel_reason = form.cleaned_data["reason"]
+            audit.save(update_fields=["stage", "cancelled_by", "cancelled_at", "cancel_reason"])
+            log_activity(
+                request.user,
+                "cancel",
+                audit,
+                {"stage": [old_stage, audit.stage], "reason": [None, audit.cancel_reason]},
+            )
         messages.success(request, f"Audit “{audit.title}” cancelled.")
         return redirect("audits:audit_detail", pk=audit.pk)
     return render(request, "audits/audit_cancel.html", {"audit": audit, "form": form})

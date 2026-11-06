@@ -1,0 +1,39 @@
+{# Remarks of one line (line set) or the whole audit. Needs `audit`, `line`, `remarks`, `form`, `can_remark`. #}
+{% with box_id=line.pk|default:"general" %}
+<div id="remarks-{{ box_id }}" hx-target="#remarks-{{ box_id }}" hx-swap="outerHTML" class="flex flex-col gap-3">
+  {% if line %}<h3 class="text-lg font-bold">Remarks · {{ line.item_code }}</h3><p class="-mt-2 text-sm text-base-content/70">{{ line.description }}</p>{% endif %}
+  {% if error %}<div role="alert" class="alert alert-soft alert-error py-2 text-sm"><span>{{ error }}</span></div>{% endif %}
+  {% for remark in remarks %}
+    <div class="rounded-box bg-base-200 p-3" x-data="{ editing: false }">
+      <div class="mb-1 flex flex-wrap items-center gap-2 text-xs text-base-content/70">
+        <span class="font-bold text-base-content">{{ remark.created_by.full_name }}</span>
+        <span>{{ remark.created_at|date:"d M Y H:i" }}</span>
+        {% if remark.edited_at %}<span class="tooltip" data-tip="Edited {{ remark.edited_at|date:'d M Y H:i' }}"><span class="badge badge-xs badge-ghost">edited</span></span>{% endif %}
+        {% if remark.can_change %}
+          <span class="flex-1"></span>
+          <button type="button" class="link link-primary" x-show="!editing" @click="editing = true" title="Change the text of your remark">Edit</button>
+          <button type="button" class="link link-error" x-show="!editing" hx-post="{% url 'audits:remark_delete' remark.pk %}" hx-confirm="Delete this remark? It stays in the activity log." title="Remove your remark (kept in the activity log)">Delete</button>
+        {% endif %}
+      </div>
+      <p class="whitespace-pre-line text-sm" x-show="!editing">{{ remark.text }}</p>
+      {% if remark.can_change %}
+        <form x-show="editing" x-cloak hx-post="{% url 'audits:remark_edit' remark.pk %}" class="flex flex-col gap-2">
+          <textarea name="text" rows="2" maxlength="1000" class="textarea textarea-sm w-full" aria-label="Edit remark">{{ remark.text }}</textarea>
+          <div class="flex gap-2"><button type="submit" class="btn btn-sm btn-primary" title="Save the changed text">Save</button><button type="button" class="btn btn-sm btn-ghost" @click="editing = false">Cancel</button></div>
+        </form>
+      {% endif %}
+    </div>
+  {% empty %}
+    <p class="text-sm text-base-content/60">No remarks yet.</p>
+  {% endfor %}
+  {% if can_remark %}
+    <form hx-post="{% url 'audits:remark_panel' audit.pk %}" class="flex flex-col gap-2">
+      {% if line %}<input type="hidden" name="line" value="{{ line.pk }}">{% endif %}
+      <span class="tooltip tooltip-bottom w-full" data-tip="Your note, e.g. “bin mismatch” or “damaged stock”. Up to 1000 characters.">{{ form.text }}</span>
+      {% for e in form.text.errors %}<p class="text-sm text-error">{{ e }}</p>{% endfor %}
+      <div><button type="submit" class="btn btn-sm btn-primary" title="Save this remark with your name and the time">Add remark</button></div>
+    </form>
+  {% endif %}
+  {% if line %}<span id="remark-count-{{ line.pk }}" hx-swap-oob="true">{{ remarks|length }}</span>{% endif %}
+</div>
+{% endwith %}

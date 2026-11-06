@@ -7,16 +7,20 @@
         <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
         <tbody>
           {% for line in table.page %}
-            <tr>
-              <td class="dt-sticky font-bold">{{ line.item_code }}</td>
-              <td>{{ line.description }}</td>
-              <td>{{ line.uom }}</td>
-              <td class="text-right {% if line.erp_qty < 0 %}text-error font-bold{% endif %}">{{ line.erp_qty|floatformat:"-3" }}</td>
-              <td class="text-right">{{ line.rate|floatformat:2|intcomma }}</td>
-              <td class="text-right">{{ line.erp_value|floatformat:2|intcomma }}</td>
-            </tr>
+            {% if counting_view %}
+              {% include "audits/partials/count_row.html" %}
+            {% else %}
+              <tr>
+                <td class="dt-sticky font-bold">{{ line.item_code }}</td>
+                <td>{{ line.description }}</td>
+                <td>{{ line.uom }}</td>
+                <td class="text-right {% if line.erp_qty < 0 %}text-error font-bold{% endif %}">{{ line.erp_qty|floatformat:"-3" }}</td>
+                <td class="text-right">{{ line.rate|floatformat:2|intcomma }}</td>
+                <td class="text-right">{{ line.erp_value|floatformat:2|intcomma }}</td>
+              </tr>
+            {% endif %}
           {% empty %}
-            <tr><td colspan="6" class="py-6 text-center text-base-content/70">No lines match your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear all filters</a></td></tr>
+            <tr><td colspan="12" class="py-6 text-center text-base-content/70">No lines match your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear all filters</a></td></tr>
           {% endfor %}
         </tbody>
       </table>

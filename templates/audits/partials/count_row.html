@@ -1,0 +1,38 @@
+{% load humanize %}{# One audit line on the count screen. Needs `line`, `audit`, `can_count`, `can_remark`. #}
+<tr id="line-{{ line.pk }}" class="{% if error %}bg-error/10{% endif %}">
+  <td class="dt-sticky font-bold">{{ line.item_code }}</td>
+  <td>{{ line.description }}</td>
+  <td>{{ line.uom }}</td>
+  <td class="text-right {% if line.erp_qty < 0 %}text-error font-bold{% endif %}">{{ line.erp_qty|floatformat:"-3" }}</td>
+  <td class="text-right">{{ line.rate|floatformat:2|intcomma }}</td>
+  <td class="text-right">{{ line.erp_value|floatformat:2|intcomma }}</td>
+  <td class="text-right">
+    {% if can_count %}
+      <form hx-post="{% url 'audits:line_count' line.pk %}" hx-target="closest tr" hx-swap="outerHTML" hx-trigger="change, submit" hx-sync="this:drop" class="flex flex-col items-end gap-1">
+        <input type="text" name="physical_qty" inputmode="decimal" autocomplete="off"
+               value="{% if error %}{{ line.typed }}{% elif line.physical_qty is not None %}{{ line.physical_qty|floatformat:'-3' }}{% endif %}"
+               class="count-input input input-sm w-24 text-right{% if error %} input-error{% elif saved %} input-success{% endif %}"
+               aria-label="Physical Qty for {{ line.item_code }}"
+               title="Type the quantity you counted, then press Enter or click outside the box to save. Leave empty = Not counted.">
+        {% if error %}<span class="max-w-48 text-left text-xs text-error" role="alert">{{ error }}</span>{% endif %}
+      </form>
+    {% elif line.physical_qty is not None %}{{ line.physical_qty|floatformat:"-3" }}{% else %}<span class="text-base-content/50">—</span>{% endif %}
+  </td>
+  <td>
+    <button type="button" class="btn btn-xs btn-ghost gap-1" title="{% if can_remark %}See or add remarks for this line{% else %}See remarks for this line{% endif %}"
+            hx-get="{% url 'audits:remark_panel' audit.pk %}?line={{ line.pk }}" hx-target="#remark-dialog-body" hx-swap="innerHTML"
+            hx-on::after-request="if (event.detail.successful) document.getElementById('remark-dialog').showModal()">
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span id="remark-count-{{ line.pk }}">{{ line.remark_count|default:0 }}</span>
+    </button>
+  </td>
+  <td {% if line.variance_qty is not None %}title="Physical {{ line.physical_qty|floatformat:'-3' }} − ERP {{ line.erp_qty|floatformat:'-3' }}"{% endif %} class="text-right {% if line.count_status == 'excess' %}text-info{% elif line.count_status == 'shortage' %}text-error{% endif %}">{% if line.variance_qty is not None %}{% if line.variance_qty > 0 %}+{% endif %}{{ line.variance_qty|floatformat:"-3" }}{% else %}—{% endif %}</td>
+  <td class="text-right">{% if line.variance_value is not None %}{{ line.variance_value|floatformat:2|intcomma }}{% else %}—{% endif %}</td>
+  <td>
+    {% if line.count_status == "ok" %}<span class="tooltip" data-tip="Difference is within tolerance; no query"><span class="badge badge-soft badge-success">OK</span></span>
+    {% elif line.count_status == "excess" %}<span class="tooltip" data-tip="Counted more than ERP, beyond tolerance; a query is raised at Checking Done"><span class="badge badge-soft badge-info">Excess</span></span>
+    {% elif line.count_status == "shortage" %}<span class="tooltip" data-tip="Counted less than ERP, beyond tolerance; a query is raised at Checking Done"><span class="badge badge-soft badge-error">Shortage</span></span>
+    {% else %}<span class="tooltip" data-tip="No Physical Qty yet"><span class="badge badge-ghost whitespace-nowrap">Not counted</span></span>{% endif %}
+  </td>
+  <td class="whitespace-nowrap text-sm">{% if line.counted_by %}<span title="Counted on {{ line.counted_at|date:'d M Y H:i' }}">{{ line.counted_by.full_name }}<br><span class="text-xs text-base-content/60">{{ line.counted_at|date:"d M H:i" }}</span></span>{% else %}—{% endif %}</td>
+</tr>

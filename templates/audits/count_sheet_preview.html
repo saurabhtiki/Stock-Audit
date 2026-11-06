@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Check count sheet{% endblock %}
+{% block content %}
+<div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Check count sheet</li></ul></div>
+
+<h1 class="mb-1 text-2xl font-bold">Check count sheet</h1>
+<p class="mb-4 text-base-content/70">
+  {{ file_name }}{% if upload %} · checked by {{ upload.uploaded_by.full_name }}{% endif %}.
+  {% if check.has_errors %}Nothing was saved. Fix the errors below in your sheet and upload it again.{% else %}Nothing is saved until you confirm. The file itself is not kept.{% endif %}
+</p>
+
+<div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
+  <div class="stat"><div class="stat-title">Counts</div><div class="stat-value text-2xl">{{ check.count_rows|length|intcomma }}</div><div class="stat-desc">Rows with a Physical Qty</div></div>
+  <div class="stat"><div class="stat-title">Remarks</div><div class="stat-value text-2xl">{{ check.remark_rows|length|intcomma }}</div><div class="stat-desc">Added as new remarks</div></div>
+  <div class="stat"><div class="stat-title">Errors</div><div class="stat-value text-2xl {% if check.has_errors %}text-error{% endif %}">{{ check.error_count }}</div><div class="stat-desc">Must be fixed</div></div>
+  <div class="stat"><div class="stat-title">Changes</div><div class="stat-value text-2xl {% if check.warning_rows %}text-warning{% endif %}">{{ check.warning_rows|length }}</div><div class="stat-desc">Counts already entered that will change</div></div>
+</div>
+
+{% if check.file_errors %}
+  <div role="alert" class="alert alert-soft alert-error mb-4"><ul class="list-disc pl-5">{% for error in check.file_errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+{% if check.error_rows %}
+  <section class="mb-4">
+    <h2 class="mb-2 text-lg font-bold text-error">Errors — fix these in your sheet and upload again</h2>
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm data-table" data-table="count-errors" data-csv-tip="Download the error list">
+        <thead><tr><th>Row</th><th>Item No</th><th>Problem</th></tr></thead>
+        <tbody>
+          {% for row in check.error_rows %}
+            <tr><td>{{ row.row_number }}</td><td class="font-bold">{{ row.code|default:"—" }}</td><td class="text-error">{{ row.errors|join:" " }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{% if check.warning_rows %}
+  <section class="mb-4">
+    <h2 class="mb-2 text-lg font-bold">Counts that will change — check these before you confirm</h2>
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm data-table" data-table="count-changes" data-csv-tip="Download the list of changes">
+        <thead><tr><th>Row</th><th>Item No</th><th class="text-right">Count now</th><th class="text-right">Sheet says</th></tr></thead>
+        <tbody>
+          {% for row in check.warning_rows %}
+            <tr><td>{{ row.row_number }}</td><td class="font-bold">{{ row.code }}</td><td class="text-right">{{ row.old_qty|floatformat:"-3" }}</td><td class="text-right font-bold">{{ row.qty|floatformat:"-3" }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{% if can_confirm %}
+  <form method="post" class="card mb-4 bg-base-100" x-data="{ accepted: {% if check.warning_rows %}false{% else %}true{% endif %}, busy: false }" @submit="busy = true" @pageshow.window="busy = false">
+    {% csrf_token %}
+    <input type="hidden" name="expected_changes" value="{{ check.warning_rows|length }}">
+    <div class="card-body gap-3">
+      <h2 class="card-title">Save counts</h2>
+      <p class="text-sm">Counts in the sheet are saved on their lines. Blank cells are skipped, so they never clear a count. Remarks are added; old remarks stay.</p>
+      {% if check.warning_rows %}
+        <label class="label cursor-pointer gap-2 whitespace-normal text-base-content">
+          <input type="checkbox" name="accept_warnings" class="checkbox checkbox-warning" x-model="accepted">
+          {{ check.warning_rows|length }} line{{ check.warning_rows|length|pluralize }} already counted will be changed. I want to go ahead.
+        </label>
+      {% endif %}
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary" :disabled="!accepted || busy" title="Save these counts and remarks">Confirm and save</button>
+        <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-ghost">Back to audit</a>
+      </div>
+    </div>
+  </form>
+{% else %}
+  <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-primary mb-4" title="Go back and upload a corrected sheet">Back to audit</a>
+{% endif %}
+
+{% if check.rows %}
+  <section>
+    <h2 class="mb-2 text-lg font-bold">First {{ check.preview_rows|length }} rows{% if check.rows|length > check.preview_rows|length %} of {{ check.rows|length|intcomma }}{% endif %}</h2>
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm table-zebra data-table" data-table="count-preview" data-filter="off">
+        <thead><tr><th>Row</th><th>Item No</th><th class="text-right">Physical Qty</th><th>Remark</th></tr></thead>
+        <tbody>
+          {% for row in check.preview_rows %}
+            <tr class="{% if row.errors %}bg-error/10{% elif row.warnings %}bg-warning/15{% endif %}">
+              <td>{{ row.row_number }}</td><td class="font-bold">{{ row.code }}</td>
+              <td class="text-right">{% if row.qty is not None %}{{ row.qty|floatformat:"-3" }}{% else %}<span class="text-base-content/50" title="Blank: the line keeps its current count">—</span>{% endif %}</td>
+              <td>{{ row.remark }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

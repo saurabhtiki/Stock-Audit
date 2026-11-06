@@ -118,3 +118,28 @@ class ItemForm(StyledFormMixin, forms.ModelForm):
         if code and not self.instance.pk and clash.exists():
             self.add_error("code", "This company already has an item with this code.")
         return cleaned
+
+
+class RemarkForm(forms.Form):
+    text = forms.CharField(
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 2,
+                "class": "textarea textarea-sm w-full",
+                "placeholder": "Add a remark…",
+            }
+        ),
+        error_messages={
+            "required": "Type a remark first.",
+            "max_length": "A remark can be at most 1000 characters.",
+        },
+    )
+
+
+class CheckingDoneForm(forms.Form):
+    confirm = forms.BooleanField(
+        label="I understand counts cannot be changed after this, and queries will be raised.",
+        error_messages={"required": "Tick the box to confirm Checking Done."},
+    )

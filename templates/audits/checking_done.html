@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Checking Done{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Checking Done</li></ul></div>
+  <h1 class="mb-4 text-2xl font-bold">Checking Done</h1>
+
+  {% include "audits/partials/count_stats.html" %}
+
+  <div class="card bg-base-100">
+    <form method="post" class="card-body gap-3" novalidate>
+      {% csrf_token %}
+      {% if summary.counted %}
+        <p>
+          <strong>{{ summary.queries|intcomma }}</strong> quer{{ summary.queries|pluralize:"y,ies" }} will be raised: one for each Excess or Shortage line.
+          OK lines and the {{ summary.not_counted|intcomma }} Not counted line{{ summary.not_counted|pluralize }} get no query.
+        </p>
+        <p class="text-sm text-base-content/70">After this, nobody can change counts or upload a count sheet, and it can't be undone. Remarks can still be added or changed until the audit is Locked.</p>
+        <div role="alert" class="alert alert-soft alert-warning">
+          <label class="label cursor-pointer items-start gap-2 whitespace-normal text-base-content">
+            <input type="checkbox" name="confirm" class="checkbox checkbox-warning" {% if form.confirm.value %}checked{% endif %}>
+            <span>{{ form.confirm.label }}</span>
+          </label>
+        </div>
+        {% for error in form.confirm.errors %}<p class="text-error">{{ error }}</p>{% endfor %}
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary" title="Close counting and raise the queries">Mark Checking Done</button>
+          <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-ghost">Back</a>
+        </div>
+      {% else %}
+        <div role="alert" class="alert alert-soft alert-error"><span>Nothing is counted yet. Count at least one line before marking Checking Done.</span></div>
+        <div><a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-primary">Back to counting</a></div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

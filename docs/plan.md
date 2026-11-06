@@ -240,3 +240,69 @@ Confirmed in chat (grilled point by point).
 - CSV has every matching row (not just the page), plain numbers, ISO dates, formula guard, skips columns marked `csv=False`
 - Items: quick search + New/Active buttons + column filters work together; bulk review still works
 - another company's rows never show up, in the table or in the CSV
+
+---
+
+## Phase 3 — Physical count, offline count sheet, remarks, Checking Done (DONE — 170 tests pass)
+
+Goal: acceptance criteria 4 and 5. The auditor counts in the app and through the Excel count
+sheet, some lines are left Not counted, and at Checking Done queries are created only for
+Excess / Shortage lines. After that, counts can't be changed or rolled back.
+
+Example: Audit "Aug26" is frozen with tolerance qty 2. Anil (Auditor) downloads the count sheet
+(no ERP Qty in it), counts the store, then uploads it. The preview says *"Row 9: item ZZ-99 is not
+in this audit"*. He fixes the row and uploads again. He ticks *"12 lines already counted will be
+changed"* and confirms. In the app he types 0 for ITM-007 (status Shortage) and adds the remark
+"bin mismatch". 40 lines are still blank. He opens Checking Done, sees *"960 counted · 40 not
+counted · 25 Excess (₹12,400) · 31 Shortage (₹18,900) · 56 queries will be created"*, ticks
+the box and confirms. Counts are now fixed, and remarks stay editable until the audit is locked.
+
+### Decisions (from grilling)
+| # | Decision |
+|---|---|
+| 1 | In scope: counting in the app, offline sheet, line and general remarks, Checking Done. Checking Done **creates query records** (status Open) for each Excess / Shortage line. Query and action screens come in Phase 4. Media comes later. |
+| 2 | Variance within tolerance → status **OK**, with the variance still shown and no query. Over either tolerance → **Excess** / **Shortage**. If ERP Qty is 0 and the count isn't 0, the % test counts as exceeded. |
+| 3 | The app shows the auditor ERP Qty, variance and status (filters Not counted / Excess / Shortage / OK). Only the Excel sheet is blind. |
+| 4 | Physical Qty box on each row. It saves on Enter or when you click out of the box (HTMX) and shows "Saved ✓". Status and variance update right away, and it works on a phone. Blank = Not counted; clearing a count resets the line. |
+| 5 | A count is 0 or more with at most 3 decimals. More decimals or a negative number is an error with a clear message. |
+| 6 | Several auditors can count at once and the last save wins. Each line shows who counted it and when, and every count change is logged (old → new). |
+| 7 | Count sheet upload: .xlsx / .csv; columns matched by heading. An item not in the audit or a duplicate code = error, and a bad number = error. Blank cell = skipped (never overwrites). A filled cell that changes an existing count = **warning that needs a tick**. A sheet remark is **added** as a new line remark. Preview first; nothing is saved until Confirm, and the file isn't stored. |
+| 8 | Remarks: many per line and many per audit, each with who and when. Only the writer edits or deletes, until Locked. Delete is a soft delete and is logged. |
+| 9 | Checking Done: anyone with `count_and_remarks` in the Branch. A summary screen + tick; **blocked if nothing is counted**. It can't be undone by anyone. |
+| 10 | Admin cancel of a frozen audit only if **no line has a count**. Otherwise the button is hidden and a tooltip explains why. |
+| 11 | Before Checking Done, counts and remarks can be changed freely (app + sheet). **After Checking Done, counts are fixed** (app and sheet upload blocked); remarks stay editable until Locked. |
+| 12 | The downloaded sheet's Physical Qty column is **always empty** (blind, simple). |
+| 13 | Moving the other list screens onto the table component is left for a later small phase. |
+
+### What gets built
+1. **AuditLine** gets: `physical_qty` (blank = not counted), `variance_qty`, `variance_value`, `count_status`
+   (Not counted / OK / Excess / Shortage, stored so the table can filter and sort), `counted_by`, `counted_at`.
+   One function works out variance + status using the audit's tolerance.
+2. **Count screen** (audit detail, stage ERP Frozen): audit-lines table (Phase 2.2 component) with
+   the Physical Qty box, variance, status badge, counted by/at, filters by status, and counters
+   (counted / not counted / Excess / Shortage). Row remark button opens a small remark panel.
+3. **Count sheet download** (.xlsx): Item No, Description, UoM, Physical Qty (empty), Remark.
+4. **Count sheet upload → preview → confirm** (like the ERP upload): errors in red, warnings in
+   amber with one tick, then a summary + Confirm. Each changed count is logged.
+5. **Remarks**: `Remark` model (audit, optional line, text, who, when, edited at, deleted flag).
+   General remarks section on the audit page, line remarks on each row. Add / edit / delete with log rows.
+6. **Checking Done**: summary screen + tick → stage Checking Done, `checking_done_by/at`, and one
+   `Query` (status Open, linked to the line and item) for each Excess / Shortage line, all in one transaction.
+7. **Admin cancel** checks "nothing counted yet".
+8. Tooltips on every new button and box.
+
+### Not in this phase
+Query replies, actions, carry-forward, item history, media, locking / reopening, PDF, dashboards,
+moving the other list screens to the table component.
+
+### Tests
+- status math: within tolerance = OK; over qty or % tolerance = Excess / Shortage; ERP 0 + count 5 = flagged; blank = Not counted; 0 is a valid count
+- save a count (HTMX): negative or 4 decimals rejected; clearing resets; who/when stored; log row with old → new
+- no `count_and_remarks` right or another Branch → refused; Draft or Checking Done audit → count refused
+- sheet download has no ERP Qty and an empty Physical Qty column
+- sheet upload: unknown item / duplicate / bad number = error, nothing saved; blank never overwrites;
+  changing an existing count needs the tick; remark added, not replaced; blocked after Checking Done
+- remarks: only the writer edits / deletes; soft delete; blocked after Locked; logged
+- Checking Done: blocked with 0 counted; queries only for Excess / Shortage (not OK, not Not counted);
+  counts can't change afterwards; remarks still can
+- Admin cancel refused once anything is counted

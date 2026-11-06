@@ -16,8 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-<!-- delet last phase & update this line each time a phase is completed -->
-Phase 2.1 (logout fix, UoM required, decimals as warnings, ERP file not stored, bulk mark Reviewed) done. Phase 2.2 (reusable server-side table: column filters, sort, pages, CSV) done. Next: plan Phase 3 (physical count, offline count sheet, Checking Done).
+Phase 3 (count in app + offline count sheet, remarks, Checking Done raising Open queries) done. Next: plan Phase 4 (query replies, actions).
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.
