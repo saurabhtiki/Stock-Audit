@@ -28,6 +28,7 @@
     <div class="navbar-end gap-1">
       {% if current_company %}
         <a href="{% url 'audits:audit_list' %}" class="btn btn-ghost btn-sm" title="Audits of your Branches">Audits</a>
+        <a href="{% url 'audits:query_list' %}" class="btn btn-ghost btn-sm" title="Queries raised for Excess / Shortage lines: replies and actions">Queries</a>
         <a href="{% url 'audits:item_list' %}" class="btn btn-ghost btn-sm" title="Item list of this company">Items</a>
       {% endif %}
       {% if user.is_admin %}

@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 3 (count in app + offline count sheet, remarks, Checking Done raising Open queries) done. Next: plan Phase 4 (query replies, actions).
+Phase 4 (query replies/updates, actions, close/reopen, carry forward, item history, My pending items) done. Next: plan Phase 5 (locking/reopen audit, media, reports).
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

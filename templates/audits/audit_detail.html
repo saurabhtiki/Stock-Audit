@@ -110,6 +110,16 @@
     </div>
   {% endif %}
 
+  {% if audit_queries %}
+    <label class="tab gap-2" title="Queries of this audit, plus not-Closed queries carried from earlier audits of this Branch">
+      <input type="radio" name="audit_tabs" aria-label="Queries">
+      Queries <span class="badge badge-sm badge-ghost">{{ audit_queries|length }}</span>
+    </label>
+    <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+      {% include "audits/partials/audit_queries.html" %}
+    </div>
+  {% endif %}
+
   {% if uploads %}
     <label class="tab gap-2" title="ERP files uploaded for this audit, and which one is in use">
       <input type="radio" name="audit_tabs" aria-label="Uploaded files">

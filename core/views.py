@@ -37,8 +37,11 @@ def health(request):
 
 
 def home(request):
+    from audits.queries import pending_for  # audits depends on core, not the other way round
+
     branches = visible_branches(request.user, request.company)
-    return render(request, "core/home.html", {"branches": branches})
+    pending = pending_for(request.user, request.company) if request.company else None
+    return render(request, "core/home.html", {"branches": branches, "pending": pending})
 
 
 @require_POST

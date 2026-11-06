@@ -1,0 +1,6 @@
+{# Coloured badge for a query status. Needs `status` (the stored value) in the context. #}
+{% if status == "open" %}<span class="tooltip" data-tip="Waiting for a reply"><span class="badge badge-soft badge-error">Open</span></span>
+{% elif status == "reply_submitted" %}<span class="tooltip" data-tip="Replied; waiting for review, actions or closing"><span class="badge badge-soft badge-info">Reply Submitted</span></span>
+{% elif status == "action_pending" %}<span class="tooltip" data-tip="Actions added; closes once all are Verified"><span class="badge badge-soft badge-warning">Action Pending</span></span>
+{% elif status == "closed" %}<span class="tooltip" data-tip="Settled; no longer carried forward"><span class="badge badge-soft badge-success">Closed</span></span>
+{% endif %}

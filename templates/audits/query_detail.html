@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Query {{ line.item_code }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs text-sm"><ul>
+  <li><a href="{% url 'audits:query_list' %}">Queries</a></li>
+  <li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li>
+  <li>{{ line.item_code }}</li>
+</ul></div>
+
+<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-bold">{{ line.item_code }} {% include "audits/partials/query_status_badge.html" with status=query.status %}</h1>
+    <p class="text-base-content/70">{{ line.description }} · {{ line.uom }} · {{ audit.branch }} · audit “{{ audit.title }}” ({{ audit.audit_date|date:"d M Y" }})</p>
+    <p class="text-sm text-base-content/60">Raised on {{ query.created_at|date:"d M Y H:i" }}{% if query.closed_at %} · Closed by {{ query.closed_by.full_name }} on {{ query.closed_at|date:"d M Y H:i" }}{% endif %}</p>
+  </div>
+</div>
+
+<div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
+  <div class="stat"><div class="stat-title">ERP qty</div><div class="stat-value text-2xl">{{ line.erp_qty|floatformat:"-3" }}</div></div>
+  <div class="stat"><div class="stat-title">Physical qty</div><div class="stat-value text-2xl">{{ line.physical_qty|floatformat:"-3" }}</div></div>
+  <div class="stat">
+    <div class="stat-title">Variance</div>
+    <div class="stat-value text-2xl {% if line.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ line.variance_qty|floatformat:"-3" }}</div>
+    <div class="stat-desc">{{ line.get_count_status_display }} · value {{ line.variance_value|floatformat:2|intcomma }}</div>
+  </div>
+</div>
+
+{% if query.close_note %}
+  <div role="alert" class="alert alert-soft alert-success mb-4"><span><strong>Closing note:</strong> {{ query.close_note|linebreaksbr }}</span></div>
+{% endif %}
+
+<div class="grid gap-4 lg:grid-cols-2">
+  {# ---------- Reply and updates ---------- #}
+  <div class="card bg-base-100">
+    <div class="card-body gap-3">
+      <h2 class="card-title">Reply</h2>
+      {% if reply %}
+        <div class="rounded-box bg-base-200 p-3" x-data="{ editing: false }">
+          <p class="text-sm text-base-content/60">{{ reply.created_by.full_name }} · {{ reply.created_at|date:"d M Y H:i" }}{% if reply.edited_at %} · edited {{ reply.edited_at|date:"d M Y H:i" }}{% endif %}</p>
+          <p x-show="!editing" class="whitespace-pre-line">{{ reply.text }}</p>
+          {% if can_edit_reply %}
+            <button type="button" x-show="!editing" @click="editing = true" class="btn btn-ghost btn-xs mt-1" title="Change your reply. The old text is kept in the activity log.">Edit</button>
+            <form x-show="editing" x-cloak method="post" action="{% url 'audits:query_reply_edit' query.pk %}" class="flex flex-col gap-2">
+              {% csrf_token %}
+              <textarea name="text" rows="3" maxlength="2000" required class="textarea w-full" aria-label="Reply text">{{ reply.text }}</textarea>
+              <div class="flex gap-2">
+                <button class="btn btn-sm btn-primary" title="Save the changed reply">Save</button>
+                <button type="button" class="btn btn-sm btn-ghost" @click="editing = false">Cancel</button>
+              </div>
+            </form>
+          {% endif %}
+        </div>
+
+        {% if updates %}
+          <h3 class="font-bold">Updates</h3>
+          <ul class="timeline timeline-vertical timeline-compact">
+            {% for update in updates %}
+              <li>
+                {% if not forloop.first %}<hr>{% endif %}
+                <div class="timeline-middle"><span class="status status-info"></span></div>
+                <div class="timeline-end timeline-box w-full">
+                  <p class="text-xs text-base-content/60">{{ update.created_by.full_name }} · {{ update.created_at|date:"d M Y H:i" }}</p>
+                  <p class="whitespace-pre-line">{{ update.text }}</p>
+                </div>
+                {% if not forloop.last %}<hr>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% else %}
+        <p class="text-base-content/70">No reply yet.</p>
+      {% endif %}
+
+      {% if can_reply %}
+        <form method="post" action="{% url 'audits:query_reply' query.pk %}" class="flex flex-col gap-2">
+          {% csrf_token %}
+          <label class="sr-only" for="reply-text">{% if reply %}Update{% else %}Reply{% endif %}</label>
+          <textarea id="reply-text" name="text" rows="3" maxlength="2000" required class="textarea w-full"
+                    placeholder="{% if reply %}Add an update, e.g. “Transfer slip raised today.”{% else %}Explain the difference, e.g. “2 cartons sent to Branch B on 28 Aug, no slip raised.”{% endif %}"></textarea>
+          <div>
+            <span class="tooltip" data-tip="{% if reply %}Adds a dated note under the reply; the reply itself is kept{% else %}Posts the reply. The query moves to Reply Submitted.{% endif %}">
+              <button class="btn btn-primary btn-sm">{% if reply %}Add update{% else %}Submit reply{% endif %}</button>
+            </span>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------- Actions ---------- #}
+  <div class="card bg-base-100">
+    <div class="card-body gap-3">
+      <h2 class="card-title">Actions</h2>
+      {% if actions %}
+        <ul class="list rounded-box bg-base-200">
+          {% for action in actions %}
+            <li class="list-row items-start">
+              <div class="list-col-grow">
+                <p class="whitespace-pre-line font-semibold">{{ action.description }}</p>
+                <p class="text-xs text-base-content/60">
+                  Owner {{ action.owner.full_name|default:action.owner.username }}
+                  {% if action.due_date %} · due <span class="{% if action.is_overdue %}font-bold text-error{% endif %}" {% if action.is_overdue %}title="Past its due date and not Verified"{% endif %}>{{ action.due_date|date:"d M Y" }}{% if action.is_overdue %} (overdue){% endif %}</span>{% endif %}
+                  · added by {{ action.created_by.full_name }}
+                </p>
+                {% if action.done_at %}<p class="text-xs text-base-content/60">Done by {{ action.done_by.full_name }}, {{ action.done_at|date:"d M Y H:i" }}</p>{% endif %}
+                {% if action.verified_at %}<p class="text-xs text-base-content/60">Verified by {{ action.verified_by.full_name }}, {{ action.verified_at|date:"d M Y H:i" }}</p>{% endif %}
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                {% if action.status == "open" %}<span class="badge badge-soft badge-warning">Open</span>
+                {% elif action.status == "done" %}<span class="badge badge-soft badge-info">Done</span>
+                {% else %}<span class="badge badge-soft badge-success">Verified</span>{% endif %}
+                {% if action.status == "open" and action.can_mark_done %}
+                  <form method="post" action="{% url 'audits:action_step' action.pk 'done' %}">{% csrf_token %}
+                    <span class="tooltip tooltip-left" data-tip="The work is finished; it now waits to be Verified"><button class="btn btn-xs btn-success">Mark Done</button></span>
+                  </form>
+                {% elif action.status == "done" %}
+                  {% if can_verify %}
+                    <form method="post" action="{% url 'audits:action_step' action.pk 'verify' %}">{% csrf_token %}
+                      <span class="tooltip tooltip-left" data-tip="You checked the work. Can't be undone."><button class="btn btn-xs btn-primary">Verify</button></span>
+                    </form>
+                  {% endif %}
+                  {% if action.can_mark_done %}
+                    <form method="post" action="{% url 'audits:action_step' action.pk 'undo' %}">{% csrf_token %}
+                      <span class="tooltip tooltip-left" data-tip="Set back to Open (allowed until Verified)"><button class="btn btn-xs btn-ghost">Undo Done</button></span>
+                    </form>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-base-content/70">No actions yet.{% if query.status == "open" %} Actions can be added after a reply.{% endif %}</p>
+      {% endif %}
+
+      {% if can_add_action %}
+        <form method="post" action="{% url 'audits:action_add' query.pk %}" class="flex flex-col gap-2 rounded-box border border-base-300 p-3">
+          {% csrf_token %}
+          <h3 class="font-bold">Add action</h3>
+          <textarea name="description" rows="2" maxlength="1000" required class="textarea w-full" aria-label="What needs to be done" placeholder="What needs to be done, e.g. “Raise transfer slip for 8 pcs”"></textarea>
+          <div class="flex flex-wrap gap-2">
+            <label class="tooltip" data-tip="Who will do it">
+              <span class="sr-only">Owner</span>
+              <select name="owner" required class="select select-sm w-52">
+                <option value="">Choose owner…</option>
+                {% for person in owners %}<option value="{{ person.pk }}">{{ person.full_name|default:person.username }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="tooltip" data-tip="Optional. After this date the action shows as overdue.">
+              <span class="sr-only">Due date</span>
+              <input type="date" name="due_date" min="{{ today|date:'Y-m-d' }}" class="input input-sm w-40">
+            </label>
+            <button class="btn btn-sm btn-primary" title="Add the action. The query moves to Action Pending.">Add action</button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ---------- Close / reopen ---------- #}
+{% if can_close or can_reopen %}
+  <div class="card mt-4 bg-base-100">
+    <div class="card-body gap-3">
+      {% if can_close %}
+        <h2 class="card-title">Close query</h2>
+        {% if close_blocker %}
+          <div role="alert" class="alert alert-soft alert-info"><span>Can't close yet: {{ close_blocker }}</span></div>
+        {% else %}
+          <form method="post" action="{% url 'audits:query_close' query.pk %}" class="flex flex-col gap-2">
+            {% csrf_token %}
+            <textarea name="note" rows="2" maxlength="1000" class="textarea w-full" aria-label="Closing note" {% if not actions %}required{% endif %}
+                      placeholder="{% if actions %}Optional note{% else %}No actions were added — say why none is needed, e.g. “Counting error, recount matched.”{% endif %}"></textarea>
+            <div><span class="tooltip" data-tip="Settle this query. It stops being carried forward. It can be reopened with a reason."><button class="btn btn-success">Close query</button></span></div>
+          </form>
+        {% endif %}
+      {% else %}
+        <h2 class="card-title">Reopen query</h2>
+        <form method="post" action="{% url 'audits:query_reopen' query.pk %}" class="flex flex-col gap-2">
+          {% csrf_token %}
+          <textarea name="reason" rows="2" maxlength="500" required class="textarea w-full" aria-label="Reason for reopening" placeholder="Why it is reopened (required, saved in the activity log)"></textarea>
+          <div><span class="tooltip" data-tip="Sets the query back to Open; it is carried forward again"><button class="btn btn-warning">Reopen query</button></span></div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{# ---------- Item history ---------- #}
+<div class="card mt-4 bg-base-100">
+  <div class="card-body gap-3">
+    <h2 class="card-title">Item history <span class="text-sm font-normal text-base-content/60">{{ line.item_code }} in {{ audit.branch }}</span></h2>
+    <div class="overflow-x-auto">
+      <table class="table table-sm table-zebra">
+        <thead><tr><th>Audit</th><th>Date</th><th class="text-right">ERP qty</th><th class="text-right">Physical qty</th><th class="text-right">Variance</th><th>Query</th></tr></thead>
+        <tbody>
+          {% for row in history %}
+            <tr class="{% if row.pk == line.pk %}bg-base-200 font-bold{% endif %}">
+              <td><a class="link" href="{% url 'audits:audit_detail' row.audit_id %}">{{ row.audit.title }}</a></td>
+              <td>{{ row.audit.audit_date|date:"d M Y" }}</td>
+              <td class="text-right">{{ row.erp_qty|floatformat:"-3" }}</td>
+              <td class="text-right">{% if row.physical_qty is None %}<span class="text-base-content/50">Not counted</span>{% else %}{{ row.physical_qty|floatformat:"-3" }}{% endif %}</td>
+              <td class="text-right">{{ row.variance_qty|floatformat:"-3"|default:"—" }}</td>
+              <td>{{ row.query_status|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

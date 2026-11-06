@@ -16,6 +16,8 @@
     You are working in <strong>{{ current_company.name }}</strong> as <strong>{{ current_role }}</strong>.
   </p>
 
+  {% if pending %}{% include "audits/partials/pending_items.html" %}{% endif %}
+
   <section class="mt-6">
     <h2 class="mb-2 text-lg font-bold">Your Branches</h2>
     {% if branches %}

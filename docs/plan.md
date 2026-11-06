@@ -306,3 +306,70 @@ moving the other list screens to the table component.
 - Checking Done: blocked with 0 counted; queries only for Excess / Shortage (not OK, not Not counted);
   counts can't change afterwards; remarks still can
 - Admin cancel refused once anything is counted
+
+---
+
+## Phase 4 — Query replies and actions (DONE — 193 tests pass)
+
+Built notes: no new rights were needed (Reply / Actions / Verify & close already exist in the rights grid).
+Action owner = any active member of the company, or an Admin. Queries show in a "Queries" tab on each
+audit (own + carried) and in a new top-bar "Queries" list. Logic: `audits/queries.py`, screens: `audits/query_views.py`.
+
+Goal: acceptance criteria 6 and 7 — a query goes Open → Reply Submitted → Action Pending → Closed,
+with an action owner and a verifier; an open query carries into the next audit and shows the item history.
+
+Example: Anil's audit "Aug26" raised a Shortage query on ITM-007 (ERP 50, counted 42). Priya (User,
+Branch A, reply right) writes "Two cartons sent to Branch B on 28 Aug, no slip raised." The query moves
+to **Reply Submitted**. Ravi (Manager) adds an action: "Raise transfer slip for 8 pcs", owner Priya,
+due 15 Sep. Priya marks it **Done**. Ravi (verify right) checks it and marks it **Verified**. The query
+moves to **Closed** after Ravi confirms it. If Ravi had not closed it, it would show up in the
+"Aug26" list and in the next audit's list, with its reply and actions still there.
+
+### Decisions (all recommended options confirmed by user in chat)
+Confirmed: verifier may be the same person who marked Done (decision 5) · a query can close with no action, with a short note (decision 4) ·
+carry-forward is the same record (decision 6) · reopen by anyone with close right, reason required (decision 9).
+| # | Decision |
+|---|---|
+| 1 | Replying uses the existing `reply_queries` right, per Branch. Admin decides who has it. |
+| 2 | Adding actions uses `manage_actions`. Marking Done uses `manage_actions` too (the owner or any user with the right). Verifying uses `verify_close_queries`. |
+| 3 | One reply per query. Later updates are added as dated entries under it (the reply itself is not overwritten). Writer can edit their own reply until the query is Closed. |
+| 4 | Status flow: a reply sets **Reply Submitted**. Adding the first action sets **Action Pending**. When all actions are Verified, a user with `verify_close_queries` clicks **Close**. If no action is needed, that same user can close straight from Reply Submitted, with a short note. |
+| 5 | Action status: Open → Done → Verified. Done can be undone by the owner before Verified. |
+| 6 | **Carry forward = same record**, not a copy. A query not Closed shows in the next audit's query list for that Branch (labelled with the audit it came from). No duplicate queries. |
+| 7 | **Item history** on each query page: one row per audit for that item (date, ERP, Physical, Variance, query status). |
+| 8 | Due date is optional. Overdue = due date passed and not Verified; shown in red on the list. |
+| 9 | Reopen a Closed query: user with `verify_close_queries`, reason required, status back to Open, logged. (Confirmed.) |
+| 10 | Queries are read-only once the audit is Locked (locking itself comes in a later phase). |
+| 11 | Each user's home page gets a simple "My pending items" list (replies, actions to do, actions to verify). |
+
+### What gets built
+1. **Models**: `QueryReply` (query, text, by, at, edited at), `QueryUpdate` (reply, text, by, at), `Action`
+   (query, description, owner, due date, status, done by/at, verified by/at). Query gets `closed_by/at`,
+   `reopen_reason`. No hard deletes.
+2. **Query list** per Branch (table component, Phase 2.2): query no., item, audit, variance, status,
+   open actions, overdue flag. Filters by status and Branch. Includes queries carried forward.
+3. **Query page**: line details, item history table, reply box (or the reply + updates), action list
+   with add / mark done / verify buttons, Close and Reopen buttons. Each button shows only if the user has the right.
+4. **Actions**: add (description, owner dropdown of users in the Branch, due date), mark Done, mark Verified.
+5. **Status logic** in one place (`audits/query_status.py`) so views only call it.
+6. **Admin screen per Branch**: who can reply, who creates / marks done / verifies actions, who closes queries.
+   (Rights grid already exists in Phase 1 — this just adds the 3 action-related rights if missing.)
+7. **My pending items** on the home page.
+8. Tooltips on every new button and box.
+9. Every change is logged (reply, update, action add / done / verified, close, reopen).
+
+### Not in this phase
+Media attached to queries or actions, locking, PDF, full dashboards (ageing, overdue charts), reports export.
+
+### Tests
+- status flow: Open → reply → Reply Submitted → action → Action Pending → all verified → Close
+- close straight from Reply Submitted with no actions; close blocked while any action is not Verified
+- reply needs `reply_queries` in that Branch; action add needs `manage_actions`; verify needs `verify_close_queries`
+- other Branch users cannot see or act on the query; Viewer sees but cannot act
+- one reply per query; updates are added, the reply text is kept; writer edits only before Closed
+- carry forward: a not-Closed query shows in the next audit's list; a Closed one does not; no duplicate created
+- item history shows one row per audit for that item
+- overdue flag: due date passed and not Verified; no due date = never overdue
+- reopen needs a reason and right; status back to Open; log row written
+- "My pending items" shows only what the user can act on
+- every step writes a log row

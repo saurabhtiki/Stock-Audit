@@ -138,6 +138,15 @@ class RemarkForm(forms.Form):
     )
 
 
+class ActionForm(forms.Form):
+    """Only reads the due date safely; owner and text are checked in audits.queries."""
+
+    due_date = forms.DateField(
+        required=False,
+        error_messages={"invalid": "Enter the due date as a date, e.g. 2026-09-15."},
+    )
+
+
 class CheckingDoneForm(forms.Form):
     confirm = forms.BooleanField(
         label="I understand counts cannot be changed after this, and queries will be raised.",

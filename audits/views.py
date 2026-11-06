@@ -30,6 +30,7 @@ from audits.permissions import (
     get_visible_audit,
     has_counts,
 )
+from audits.queries import queries_for_audit
 from core.activity import diff, log_activity, snapshot
 from core.datatable import CHOICE, NUMBER, Column, DataTable
 
@@ -212,6 +213,9 @@ def audit_detail(request, pk):
                 "totals": totals,
                 "summary": counting.count_summary(audit) if rights["counting_view"] else None,
                 "uploads": audit.uploads.select_related("uploaded_by"),
+                "audit_queries": (
+                    [] if audit.stage == Audit.Stage.CANCELLED else list(queries_for_audit(audit))
+                ),
                 "upload_form": UploadForm(),
                 "can_edit": can_edit_audit(user, audit),
                 "can_upload": can_upload(user, audit),

@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 from core.managers import NoDeleteQuerySet
 from core.models import Branch, Company
@@ -275,19 +276,33 @@ class CountUpload(models.Model):
 
 
 class Query(models.Model):
-    """Raised at Checking Done for each Excess / Shortage line. Replies come in Phase 4."""
+    """Raised at Checking Done for each Excess / Shortage line.
+
+    Open → Reply Submitted → Action Pending → Closed (see audits.queries).
+    A query that is not Closed is carried into the Branch's later audits (same record).
+    """
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"
+        REPLY_SUBMITTED = "reply_submitted", "Reply Submitted"
+        ACTION_PENDING = "action_pending", "Action Pending"
+        CLOSED = "closed", "Closed"
 
     audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="queries")
     line = models.OneToOneField(AuditLine, on_delete=models.PROTECT, related_name="query")
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="queries")
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.OPEN, db_index=True
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    closed_at = models.DateTimeField(null=True, blank=True)
+    close_note = models.TextField(blank=True)
 
     objects = NoDeleteQuerySet.as_manager()
 
@@ -300,3 +315,97 @@ class Query(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("Queries are never deleted.")
+
+    @property
+    def is_closed(self) -> bool:
+        return self.status == self.Status.CLOSED
+
+
+class QueryReply(models.Model):
+    """The one reply to a query. Later news goes into QueryUpdate rows."""
+
+    query = models.OneToOneField(Query, on_delete=models.PROTECT, related_name="reply")
+    text = models.TextField(max_length=2000)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    def __str__(self) -> str:
+        return f"Reply to {self.query}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Replies are never deleted.")
+
+
+class QueryUpdate(models.Model):
+    """A dated note added under the reply, e.g. “Transfer slip raised today.”"""
+
+    query = models.ForeignKey(Query, on_delete=models.PROTECT, related_name="updates")
+    text = models.TextField(max_length=2000)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        return f"Update on {self.query}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Updates are never deleted.")
+
+
+class Action(models.Model):
+    """Something to do to settle a query: Open → Done → Verified."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        DONE = "done", "Done"
+        VERIFIED = "verified", "Verified"
+
+    query = models.ForeignKey(Query, on_delete=models.PROTECT, related_name="actions")
+    description = models.TextField(max_length=1000)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.OPEN, db_index=True
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    done_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        return f"Action on {self.query}: {self.description[:40]}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Actions are never deleted.")
+
+    @property
+    def is_overdue(self) -> bool:
+        return (
+            self.due_date is not None
+            and self.status != self.Status.VERIFIED
+            and self.due_date < timezone.localdate()
+        )

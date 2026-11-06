@@ -1,6 +1,6 @@
 from django.urls import path
 
-from audits import count_views, views
+from audits import count_views, query_views, views
 
 app_name = "audits"
 urlpatterns = [
@@ -26,6 +26,14 @@ urlpatterns = [
     path("lines/<int:pk>/count/", count_views.line_count, name="line_count"),
     path("remarks/<int:pk>/edit/", count_views.remark_edit, name="remark_edit"),
     path("remarks/<int:pk>/delete/", count_views.remark_delete, name="remark_delete"),
+    path("queries/", query_views.query_list, name="query_list"),
+    path("queries/<int:pk>/", query_views.query_detail, name="query_detail"),
+    path("queries/<int:pk>/reply/", query_views.query_reply, name="query_reply"),
+    path("queries/<int:pk>/reply/edit/", query_views.query_reply_edit, name="query_reply_edit"),
+    path("queries/<int:pk>/actions/", query_views.action_add, name="action_add"),
+    path("queries/<int:pk>/close/", query_views.query_close, name="query_close"),
+    path("queries/<int:pk>/reopen/", query_views.query_reopen, name="query_reopen"),
+    path("actions/<int:pk>/<str:step>/", query_views.action_step, name="action_step"),
     path("items/", views.item_list, name="item_list"),
     path("items/new/", views.item_form, name="item_create"),
     path("items/review/", views.item_bulk_review, name="item_bulk_review"),

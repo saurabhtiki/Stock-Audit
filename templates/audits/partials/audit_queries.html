@@ -1,0 +1,21 @@
+{% load humanize %}
+<div class="overflow-x-auto">
+  <table class="table table-sm table-zebra data-table" data-table="audit-queries">
+    <thead><tr><th>Item No</th><th>Description</th><th class="text-right">Variance</th><th class="text-right">Var. value</th><th>Status</th><th>Raised in</th></tr></thead>
+    <tbody>
+      {% for query in audit_queries %}
+        <tr>
+          <td><a class="link link-primary font-bold" href="{% url 'audits:query_detail' query.pk %}" title="Open this query: reply, actions, history">{{ query.line.item_code }}</a></td>
+          <td>{{ query.line.description }}</td>
+          <td class="text-right {% if query.line.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ query.line.variance_qty|floatformat:"-3" }}</td>
+          <td class="text-right">{{ query.line.variance_value|floatformat:2|intcomma }}</td>
+          <td>{% include "audits/partials/query_status_badge.html" with status=query.status %}</td>
+          <td>
+            {% if query.audit_id == audit.pk %}This audit
+            {% else %}<span class="tooltip" data-tip="Not Closed yet, so carried forward from an earlier audit"><span class="badge badge-soft badge-secondary">Carried</span></span> {{ query.audit.title }} ({{ query.audit.audit_date|date:"d M Y" }}){% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

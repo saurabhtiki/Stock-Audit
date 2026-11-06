@@ -1,0 +1,43 @@
+{# "My pending items" on the home page. Needs `pending` from audits.queries.pending_for. #}
+<section class="mt-6">
+  <h2 class="mb-2 text-lg font-bold">My pending items</h2>
+  {% if pending.to_reply or pending.my_actions or pending.to_verify or pending.to_close %}
+    <div class="grid gap-4 md:grid-cols-2">
+      {% if pending.to_reply %}
+        <div class="card bg-base-100"><div class="card-body gap-2 p-4">
+          <h3 class="card-title text-base" title="Open queries in Branches where you have the Reply right">Replies to write <span class="badge badge-error">{{ pending.to_reply|length }}</span></h3>
+          <ul class="list">{% for query in pending.to_reply %}
+            <li class="list-row py-1"><a class="link link-primary font-bold" href="{% url 'audits:query_detail' query.pk %}">{{ query.line.item_code }}</a><span class="text-sm">{{ query.audit.branch.code }} · {{ query.line.description|truncatechars:40 }}</span></li>
+          {% endfor %}</ul>
+        </div></div>
+      {% endif %}
+      {% if pending.my_actions %}
+        <div class="card bg-base-100"><div class="card-body gap-2 p-4">
+          <h3 class="card-title text-base" title="Open actions where you are the owner">My actions to do <span class="badge badge-warning">{{ pending.my_actions|length }}</span></h3>
+          <ul class="list">{% for action in pending.my_actions %}
+            <li class="list-row py-1"><a class="link link-primary font-bold" href="{% url 'audits:query_detail' action.query_id %}">{{ action.query.line.item_code }}</a>
+              <span class="text-sm">{{ action.description|truncatechars:50 }}{% if action.due_date %} · <span class="{% if action.is_overdue %}font-bold text-error{% endif %}">due {{ action.due_date|date:"d M" }}</span>{% endif %}</span></li>
+          {% endfor %}</ul>
+        </div></div>
+      {% endif %}
+      {% if pending.to_verify %}
+        <div class="card bg-base-100"><div class="card-body gap-2 p-4">
+          <h3 class="card-title text-base" title="Done actions waiting for you to check and Verify">Actions to verify <span class="badge badge-info">{{ pending.to_verify|length }}</span></h3>
+          <ul class="list">{% for action in pending.to_verify %}
+            <li class="list-row py-1"><a class="link link-primary font-bold" href="{% url 'audits:query_detail' action.query_id %}">{{ action.query.line.item_code }}</a><span class="text-sm">{{ action.description|truncatechars:50 }}</span></li>
+          {% endfor %}</ul>
+        </div></div>
+      {% endif %}
+      {% if pending.to_close %}
+        <div class="card bg-base-100"><div class="card-body gap-2 p-4">
+          <h3 class="card-title text-base" title="Replied queries with no unverified actions: review and close them">Queries to close <span class="badge badge-success">{{ pending.to_close|length }}</span></h3>
+          <ul class="list">{% for query in pending.to_close %}
+            <li class="list-row py-1"><a class="link link-primary font-bold" href="{% url 'audits:query_detail' query.pk %}">{{ query.line.item_code }}</a><span class="text-sm">{{ query.audit.branch.code }} · {{ query.get_status_display }}</span></li>
+          {% endfor %}</ul>
+        </div></div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div role="alert" class="alert alert-soft alert-success"><span>Nothing waiting for you. 🎉</span></div>
+  {% endif %}
+</section>

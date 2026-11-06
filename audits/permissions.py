@@ -86,6 +86,44 @@ def can_remark(user, audit: Audit) -> bool:
     return audit.remarks_open and has_right(user, audit.branch, "count_and_remarks")
 
 
+def queries_open(audit: Audit) -> bool:
+    """Queries can be worked on while the audit is at Checking Done (read-only once Locked)."""
+    return audit.stage == Audit.Stage.CHECKING_DONE and audit.branch.is_usable
+
+
+def can_reply(user, query) -> bool:
+    return (
+        not query.is_closed
+        and queries_open(query.audit)
+        and has_right(user, query.audit.branch, "reply_queries")
+    )
+
+
+def can_edit_reply(user, query) -> bool:
+    reply = getattr(query, "reply", None)
+    return reply is not None and reply.created_by_id == user.pk and can_reply(user, query)
+
+
+def can_add_action(user, query) -> bool:
+    return (
+        query.status in (query.Status.REPLY_SUBMITTED, query.Status.ACTION_PENDING)
+        and queries_open(query.audit)
+        and has_right(user, query.audit.branch, "manage_actions")
+    )
+
+
+def can_mark_done(user, action) -> bool:
+    """The owner, or anyone with the Actions right, while the query is not Closed."""
+    query = action.query
+    if query.is_closed or not queries_open(query.audit):
+        return False
+    return action.owner_id == user.pk or has_right(user, query.audit.branch, "manage_actions")
+
+
+def can_verify_close(user, query) -> bool:
+    return queries_open(query.audit) and has_right(user, query.audit.branch, "verify_close_queries")
+
+
 def can_change_remark(user, remark) -> bool:
     """Only the writer edits or deletes, and only until the audit is Locked."""
     return (
