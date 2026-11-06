@@ -30,11 +30,15 @@
   <div role="alert" class="alert alert-soft alert-success mb-4"><span><strong>Closing note:</strong> {{ query.close_note|linebreaksbr }}</span></div>
 {% endif %}
 
-<div class="grid gap-4 lg:grid-cols-2">
+{# Tabs: plain radio inputs, no JS. After a change the page comes back on the same tab (?tab=…). #}
+<div class="tabs tabs-lift mb-6">
   {# ---------- Reply and updates ---------- #}
-  <div class="card bg-base-100">
-    <div class="card-body gap-3">
-      <h2 class="card-title">Reply</h2>
+  <label class="tab gap-2" title="The reply that explains the difference, and dated updates under it">
+    <input type="radio" name="query_tabs" aria-label="Reply" {% if active_tab == "reply" %}checked{% endif %}>
+    Reply {% if not reply %}<span class="status status-warning" title="No reply yet"></span>{% elif updates %}<span class="badge badge-sm badge-ghost" title="Updates under the reply">{{ updates|length }}</span>{% endif %}
+  </label>
+  <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+    <div class="flex max-w-3xl flex-col gap-3">
       {% if reply %}
         <div class="rounded-box bg-base-200 p-3" x-data="{ editing: false }">
           <p class="text-sm text-base-content/60">{{ reply.created_by.full_name }} · {{ reply.created_at|date:"d M Y H:i" }}{% if reply.edited_at %} · edited {{ reply.edited_at|date:"d M Y H:i" }}{% endif %}</p>
@@ -88,10 +92,22 @@
     </div>
   </div>
 
+  {# ---------- Media ---------- #}
+  <label class="tab gap-2" title="Photos, videos and files for this query, e.g. a photo of the shelf or a transfer slip">
+    <input type="radio" name="query_tabs" aria-label="Photos and files" {% if active_tab == "media" %}checked{% endif %}>
+    Photos &amp; files
+  </label>
+  <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+    <div hx-get="{% url 'audits:media_panel' 'query' query.pk %}" hx-trigger="load" hx-swap="outerHTML"><span class="loading loading-dots loading-sm"></span></div>
+  </div>
+
   {# ---------- Actions ---------- #}
-  <div class="card bg-base-100">
-    <div class="card-body gap-3">
-      <h2 class="card-title">Actions</h2>
+  <label class="tab gap-2" title="Work to settle the difference: who does it and by when">
+    <input type="radio" name="query_tabs" aria-label="Actions" {% if active_tab == "actions" %}checked{% endif %}>
+    Actions {% if actions %}<span class="badge badge-sm badge-ghost" title="Actions on this query">{{ actions|length }}</span>{% endif %}
+  </label>
+  <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+    <div class="flex max-w-3xl flex-col gap-3">
       {% if actions %}
         <ul class="list rounded-box bg-base-200">
           {% for action in actions %}
@@ -105,6 +121,10 @@
                 </p>
                 {% if action.done_at %}<p class="text-xs text-base-content/60">Done by {{ action.done_by.full_name }}, {{ action.done_at|date:"d M Y H:i" }}</p>{% endif %}
                 {% if action.verified_at %}<p class="text-xs text-base-content/60">Verified by {{ action.verified_by.full_name }}, {{ action.verified_at|date:"d M Y H:i" }}</p>{% endif %}
+                <details class="mt-1" x-data="{ loaded: false }" @toggle="if ($el.open && !loaded) { loaded = true; htmx.trigger($refs.files, 'open-files') }">
+                  <summary class="cursor-pointer text-xs link link-secondary" title="Photos and files for this action, e.g. a transfer slip">Photos &amp; files</summary>
+                  <div class="mt-2"><div x-ref="files" hx-get="{% url 'audits:media_panel' 'action' action.pk %}" hx-trigger="open-files" hx-swap="outerHTML"><span class="loading loading-dots loading-sm"></span></div></div>
+                </details>
               </div>
               <div class="flex flex-col items-end gap-1">
                 {% if action.status == "open" %}<span class="badge badge-soft badge-warning">Open</span>
@@ -157,40 +177,45 @@
       {% endif %}
     </div>
   </div>
-</div>
 
-{# ---------- Close / reopen ---------- #}
-{% if can_close or can_reopen %}
-  <div class="card mt-4 bg-base-100">
-    <div class="card-body gap-3">
-      {% if can_close %}
-        <h2 class="card-title">Close query</h2>
-        {% if close_blocker %}
-          <div role="alert" class="alert alert-soft alert-info"><span>Can't close yet: {{ close_blocker }}</span></div>
-        {% else %}
-          <form method="post" action="{% url 'audits:query_close' query.pk %}" class="flex flex-col gap-2">
+  {# ---------- Close / reopen ---------- #}
+  {% if show_close_tab %}
+    <label class="tab gap-2" title="{% if query.is_closed %}Reopen this query with a reason{% else %}Settle this query once it is ready{% endif %}">
+      <input type="radio" name="query_tabs" aria-label="{% if query.is_closed %}Reopen query{% else %}Close query{% endif %}" {% if active_tab == "close" %}checked{% endif %}>
+      {% if query.is_closed %}Reopen query{% else %}Close query {% if not close_blocker %}<span class="status status-success" title="Ready to close"></span>{% endif %}{% endif %}
+    </label>
+    <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+      <div class="flex max-w-3xl flex-col gap-3">
+        {% if can_close %}
+          {% if close_blocker %}
+            <div role="alert" class="alert alert-soft alert-info"><span>Can't close yet: {{ close_blocker }}</span></div>
+          {% else %}
+            <form method="post" action="{% url 'audits:query_close' query.pk %}" class="flex flex-col gap-2">
+              {% csrf_token %}
+              <textarea name="note" rows="2" maxlength="1000" class="textarea w-full" aria-label="Closing note" {% if not actions %}required{% endif %}
+                        placeholder="{% if actions %}Optional note{% else %}No actions were added — say why none is needed, e.g. “Counting error, recount matched.”{% endif %}"></textarea>
+              <div><span class="tooltip" data-tip="Settle this query. It stops being carried forward. It can be reopened with a reason."><button class="btn btn-success">Close query</button></span></div>
+            </form>
+          {% endif %}
+        {% elif can_reopen %}
+          <form method="post" action="{% url 'audits:query_reopen' query.pk %}" class="flex flex-col gap-2">
             {% csrf_token %}
-            <textarea name="note" rows="2" maxlength="1000" class="textarea w-full" aria-label="Closing note" {% if not actions %}required{% endif %}
-                      placeholder="{% if actions %}Optional note{% else %}No actions were added — say why none is needed, e.g. “Counting error, recount matched.”{% endif %}"></textarea>
-            <div><span class="tooltip" data-tip="Settle this query. It stops being carried forward. It can be reopened with a reason."><button class="btn btn-success">Close query</button></span></div>
+            <textarea name="reason" rows="2" maxlength="500" required class="textarea w-full" aria-label="Reason for reopening" placeholder="Why it is reopened (required, saved in the activity log)"></textarea>
+            <div><span class="tooltip" data-tip="Sets the query back to Open; it is carried forward again"><button class="btn btn-warning">Reopen query</button></span></div>
           </form>
+        {% elif reopen_frozen %}
+          <div role="alert" class="alert alert-soft alert-info"><span>This query is Closed and its audit is Locked, so it is frozen. Admin must reopen the audit before the query can be reopened.</span></div>
         {% endif %}
-      {% else %}
-        <h2 class="card-title">Reopen query</h2>
-        <form method="post" action="{% url 'audits:query_reopen' query.pk %}" class="flex flex-col gap-2">
-          {% csrf_token %}
-          <textarea name="reason" rows="2" maxlength="500" required class="textarea w-full" aria-label="Reason for reopening" placeholder="Why it is reopened (required, saved in the activity log)"></textarea>
-          <div><span class="tooltip" data-tip="Sets the query back to Open; it is carried forward again"><button class="btn btn-warning">Reopen query</button></span></div>
-        </form>
-      {% endif %}
+      </div>
     </div>
-  </div>
-{% endif %}
+  {% endif %}
 
-{# ---------- Item history ---------- #}
-<div class="card mt-4 bg-base-100">
-  <div class="card-body gap-3">
-    <h2 class="card-title">Item history <span class="text-sm font-normal text-base-content/60">{{ line.item_code }} in {{ audit.branch }}</span></h2>
+  {# ---------- Item history ---------- #}
+  <label class="tab gap-2" title="{{ line.item_code }} in every audit of {{ audit.branch }}, oldest first">
+    <input type="radio" name="query_tabs" aria-label="Item history" {% if active_tab == "history" %}checked{% endif %}>
+    Item history <span class="badge badge-sm badge-ghost" title="Audits of this Branch that had this item">{{ history|length }}</span>
+  </label>
+  <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
     <div class="overflow-x-auto">
       <table class="table table-sm table-zebra">
         <thead><tr><th>Audit</th><th>Date</th><th class="text-right">ERP qty</th><th class="text-right">Physical qty</th><th class="text-right">Variance</th><th>Query</th></tr></thead>

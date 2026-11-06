@@ -14,6 +14,22 @@
     {% if can_edit %}<span class="tooltip tooltip-bottom" data-tip="Change title, dates or type (only while ERP Draft)"><a href="{% url 'audits:audit_edit' audit.pk %}" class="btn btn-outline btn-primary">Edit</a></span>{% endif %}
     {% if can_freeze %}<span class="tooltip tooltip-bottom" data-tip="Set tolerance and lock the ERP lines so counting can start"><a href="{% url 'audits:audit_freeze' audit.pk %}" class="btn btn-primary">Tolerance &amp; freeze</a></span>{% endif %}
     {% if can_count %}<span class="tooltip tooltip-bottom" data-tip="Close counting and raise queries for Excess / Shortage lines. You see a summary first."><a href="{% url 'audits:checking_done' audit.pk %}" class="btn btn-primary">Checking Done</a></span>{% endif %}
+    {% if can_lock %}<span class="tooltip tooltip-bottom" data-tip="Close this audit. Remarks, media and Closed queries are frozen; open queries carry forward. You see a summary first."><a href="{% url 'audits:audit_lock' audit.pk %}" class="btn btn-warning">Lock audit</a></span>{% endif %}
+    {% if can_reopen %}<span class="tooltip tooltip-bottom" data-tip="Admin only: send the audit back to Checking Done, with a reason that is logged."><a href="{% url 'audits:audit_reopen' audit.pk %}" class="btn btn-outline btn-warning">Reopen audit</a></span>{% endif %}
+    {% if can_reports %}
+      <span class="tooltip tooltip-bottom" data-tip="Excel file with 5 sheets: lines, remarks, queries, actions and this audit's activity log (all rows)"><a href="{% url 'audits:audit_excel' audit.pk %}" class="btn btn-outline btn-secondary">Excel</a></span>
+      {% if can_pdf %}
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-secondary" title="Printable A4 report with summary, variances, remarks, queries, ticked photos and signatures">PDF ▾</div>
+          <form method="get" action="{% url 'audits:audit_pdf' audit.pk %}" tabindex="0" class="dropdown-content z-10 mt-1 flex w-72 flex-col gap-2 rounded-box bg-base-100 p-3 shadow">
+            <label class="text-sm" for="stockkeeper">Stockkeeper name (optional)</label>
+            <input id="stockkeeper" name="stockkeeper" maxlength="80" class="input input-sm w-full" placeholder="Leave blank to sign by hand" title="Printed under the Stockkeeper signature line">
+            {% if audit.stage != "locked" %}<p class="text-xs text-warning">Not locked yet: every page says “DRAFT – not locked”.</p>{% endif %}
+            <button type="submit" class="btn btn-sm btn-secondary">Download PDF</button>
+          </form>
+        </div>
+      {% endif %}
+    {% endif %}
     {% if can_cancel %}<span class="tooltip tooltip-bottom" data-tip="Cancel this audit with a reason. Nothing is deleted."><a href="{% url 'audits:audit_cancel' audit.pk %}" class="btn btn-outline btn-error">Cancel audit</a></span>
     {% elif cancel_blocked %}<span class="tooltip tooltip-bottom" data-tip="Counting has started (some lines have a Physical Qty), so this audit can no longer be cancelled."><button type="button" class="btn btn-outline btn-error btn-disabled" aria-disabled="true" tabindex="-1">Cancel audit</button></span>{% endif %}
   </div>
@@ -47,6 +63,12 @@
 {% if audit.checking_done_at %}
   <div role="alert" class="alert alert-soft alert-info mb-4">
     <span>Checking Done by {{ audit.checking_done_by.full_name }} on {{ audit.checking_done_at|date:"d M Y H:i" }}. Counts are fixed; remarks can still be changed until the audit is Locked.</span>
+  </div>
+{% endif %}
+
+{% if audit.locked_at %}
+  <div role="alert" class="alert alert-soft alert-warning mb-4">
+    <span>Locked by {{ audit.locked_by.full_name }} on {{ audit.locked_at|date:"d M Y H:i" }}. Remarks, media and Closed queries are frozen; open queries still carry forward.{% if not can_reopen %} Only Admin can reopen it.{% endif %}</span>
   </div>
 {% endif %}
 
@@ -107,6 +129,16 @@
     </label>
     <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
       <div hx-get="{% url 'audits:remark_panel' audit.pk %}" hx-trigger="load" hx-swap="innerHTML"><span class="loading loading-dots loading-sm"></span></div>
+    </div>
+  {% endif %}
+
+  {% if media_tab %}
+    <label class="tab gap-2" title="Photos, videos and files about the whole audit. Item photos are in each line's remarks window.">
+      <input type="radio" name="audit_tabs" aria-label="Photos and files">
+      Photos &amp; files
+    </label>
+    <div class="tab-content border-base-300 bg-base-100 p-3 sm:p-4">
+      <div hx-get="{% url 'audits:media_panel' 'audit' audit.pk %}" hx-trigger="load" hx-swap="outerHTML"><span class="loading loading-dots loading-sm"></span></div>
     </div>
   {% endif %}
 

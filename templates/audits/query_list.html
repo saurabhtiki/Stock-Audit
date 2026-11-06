@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Queries{% endblock %}
 {% block content %}
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -6,6 +7,60 @@
 </div>
 <p class="mb-4 text-sm text-base-content/70">
   One query per Excess or Shortage line, raised at Checking Done. A query that is not Closed stays live and is carried into the Branch's next audits.
+  {% if can_bulk %}Tick several queries (or filter the list and “Select all”) to give them one common reply or close them with one note.{% endif %}
 </p>
-{% include "audits/partials/query_table.html" %}
+
+<div x-data="bulkSelect({ one: 'query', many: 'queries' })" @pageshow.window="busy = false">
+  {% include "audits/partials/query_table.html" %}
+
+  {% if can_bulk %}
+    {# Common reply / close bar: shows once a query is ticked; sticks to the screen bottom so the table doesn't jump. #}
+    <form method="post" action="{% url 'audits:query_bulk' %}" x-show="count > 0" x-cloak
+          class="card card-sm sticky bottom-3 z-20 mt-3 border border-info/40 bg-base-100 shadow-xl"
+          @submit="const step = $event.submitter.value; const word = step === 'close' ? 'closed' : 'replied to';
+                   if (busy || !confirm(`${plural(count)} will be ${word} with this text. Queries that can't take it are skipped and listed. Continue?`)) { $event.preventDefault() } else { $refs.bulk_step.value = step; busy = true }">
+      {% csrf_token %}
+      {# The chosen step goes in this hidden field: a disabled (busy) button is not sent with the form. #}
+      <input type="hidden" name="do" x-ref="bulk_step">
+      <input type="hidden" name="filters" :value="filters">
+      <input type="hidden" name="all_matching" :value="allMatching ? '1' : ''">
+      <input type="hidden" name="expected" :value="count">
+      <template x-for="id in (allMatching ? excluded : picked)" :key="id">
+        <input type="hidden" :name="allMatching ? 'exclude' : 'ids'" :value="id">
+      </template>
+      <div class="card-body gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-bold" x-text="selectedText()"></span>
+          <button type="button" class="link link-primary text-sm" x-show="!allMatching && matching > picked.length" @click="selectAllMatching()"
+                  title="Also tick the open queries on the other pages of this list" x-text="selectAllText()"></button>
+          <span class="flex-1"></span>
+          <button type="button" class="btn btn-sm btn-ghost" @click="reset()" title="Untick all">Clear</button>
+        </div>
+        <p x-show="count > {{ bulk_max }}" x-cloak class="text-sm text-error">At most {{ bulk_max }} queries at once. Narrow the list with a filter.</p>
+        <label class="sr-only" for="bulk-text">Common reply or closing note</label>
+        <textarea id="bulk-text" name="text" rows="2" maxlength="1000" class="textarea w-full"
+                  placeholder="One text for all ticked queries, e.g. “Counting error, recount matched.” Used as the reply, or as the closing note."></textarea>
+        <div class="flex flex-wrap gap-2">
+          {% if can_bulk_reply %}
+            <span class="tooltip" data-tip="Queries with no reply get this as their reply (→ Reply Submitted). Queries that already have one get it as a dated update.">
+              <button type="submit" value="reply" class="btn btn-sm btn-primary" :disabled="busy || count > {{ bulk_max }}">
+                <span x-show="!busy" x-text="`Reply to ${plural(count)}`"></span>
+                <span x-show="busy" class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Saving…</span>
+              </button>
+            </span>
+          {% endif %}
+          {% if can_bulk_close %}
+            <span class="tooltip" data-tip="Closes each query that is ready: it has a reply and every action is Verified. Queries with no actions need the note. Others are skipped.">
+              <button type="submit" value="close" class="btn btn-sm btn-success" :disabled="busy || count > {{ bulk_max }}">
+                <span x-show="!busy" x-text="`Close ${plural(count)}`"></span>
+                <span x-show="busy" class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Saving…</span>
+              </button>
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </form>
+  {% endif %}
+</div>
+<script src="{% static 'js/bulk_select.js' %}"></script>
 {% endblock %}

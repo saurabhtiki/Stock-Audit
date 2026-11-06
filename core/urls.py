@@ -1,6 +1,6 @@
 from django.urls import path
 
-from core import views
+from core import backup_views, views
 
 app_name = "core"
 urlpatterns = [
@@ -20,4 +20,6 @@ urlpatterns = [
     path("departments/<int:pk>/edit/", views.department_form, name="department_edit"),
     path("departments/<int:pk>/toggle/", views.department_toggle, name="department_toggle"),
     path("activity/", views.activity_log, name="activity_log"),
+    path("backup/", backup_views.backup_page, name="backup"),
+    path("backup/download/", backup_views.backup_download, name="backup_download"),
 ]

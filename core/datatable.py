@@ -78,6 +78,13 @@ class Column:
         return str(value)
 
 
+def formula_safe(text: str) -> str:
+    """Stop Excel from running a cell that starts like a formula (e.g. a name typed as =1+1)."""
+    if text.startswith(FORMULA_STARTS) and not NUMBER_PATTERN.fullmatch(text):
+        return "'" + text
+    return text
+
+
 def _csv_text(value) -> str:
     if value is None:
         return ""
@@ -90,10 +97,7 @@ def _csv_text(value) -> str:
     if isinstance(value, bool):
         return "Yes" if value else "No"
     text = str(value)
-    # Stop Excel from running a cell that starts like a formula (e.g. a name typed as =1+1).
-    if text.startswith(FORMULA_STARTS) and not NUMBER_PATTERN.fullmatch(text):
-        text = "'" + text
-    return text
+    return formula_safe(text)
 
 
 class _Echo:
@@ -117,8 +121,11 @@ class DataTable:
         shortcuts=(),
         base_url="",
         noun="rows",
+        keep=(),
     ):
         self.params = params
+        # Outside settings carried in every link, e.g. the dashboard's Branch / month filters.
+        self.keep = tuple(keep)
         self.base_queryset = queryset
         self.columns = list(columns)
         self.by_name = {column.name: column for column in self.columns}
@@ -258,7 +265,7 @@ class DataTable:
 
     def _state(self, drop=(), add=()) -> list[tuple[str, str]]:
         """Current table settings as URL pairs, without `drop` names, plus `add` pairs."""
-        names = ["q", "sort", "per_page"] + [
+        names = [*self.keep, "q", "sort", "per_page"] + [
             name for column in self.columns for name in column.param_names
         ]
         pairs = [
@@ -392,7 +399,7 @@ class DataTable:
 
     @property
     def clear_all_url(self) -> str:
-        return self.url(drop={name for name, _ in self._state()} - {"sort", "per_page"})
+        return self.url(drop={name for name, _ in self._state()} - {"sort", "per_page", *self.keep})
 
     @cached_property
     def shortcuts(self) -> list[dict]:
@@ -478,3 +485,19 @@ class DataTable:
         if column.choices and value in column.choices:
             return _csv_text(str(column.choices[value]))
         return _csv_text(value)
+
+
+def rows_csv_response(filename: str, headings: list[str], rows) -> StreamingHttpResponse:
+    """CSV of plain rows (lists of values), with the same number / date / formula rules as
+    the table CSV. Used where the rows are worked out in Python, e.g. dashboard summaries."""
+    writer = csv.writer(_Echo())
+
+    def lines():
+        yield "﻿"  # lets Excel read accents and ₹ correctly
+        yield writer.writerow(headings)
+        for row in rows:
+            yield writer.writerow([_csv_text(value) for value in row])
+
+    response = StreamingHttpResponse(lines(), content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

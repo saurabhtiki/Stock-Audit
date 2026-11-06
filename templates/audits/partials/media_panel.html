@@ -1,0 +1,75 @@
+{# Photos, videos and files of one audit / line / query / action. Needs target, target_pk, attachments, can_add, accept, errors. #}
+<div id="media-{{ target }}-{{ target_pk }}" hx-target="this" hx-swap="outerHTML" class="flex flex-col gap-3">
+  {% for error in errors %}<div role="alert" class="alert alert-soft alert-error py-2 text-sm"><span>{{ error }}</span></div>{% endfor %}
+
+  {% if attachments %}
+    <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {% for item in attachments %}
+        <li class="flex flex-col gap-1 rounded-box bg-base-200 p-2 text-xs">
+          {% if item.kind == "photo" %}
+            <a href="{% url 'audits:attachment_file' item.pk %}" target="_blank" rel="noopener" title="Open the full-size photo">
+              <img src="{% url 'audits:attachment_file' item.pk %}" alt="{{ item.original_name }}" loading="lazy" class="aspect-square w-full rounded object-cover">
+            </a>
+          {% elif item.kind == "video" %}
+            <a href="{% url 'audits:attachment_file' item.pk %}" target="_blank" rel="noopener" title="Play the video in a new tab" class="flex aspect-square w-full items-center justify-center rounded bg-base-300 text-4xl">🎬</a>
+          {% else %}
+            <a href="{% url 'audits:attachment_file' item.pk %}" title="Download this file" class="flex aspect-square w-full items-center justify-center rounded bg-base-300 text-4xl">📄</a>
+          {% endif %}
+          {% if item.can_remove %}
+            <input type="text" name="note" value="{{ item.note }}" maxlength="{{ note_max }}" class="input input-xs w-full"
+                   placeholder="Add a note, e.g. Damaged box, rack B3" aria-label="Note for {{ item.original_name }}"
+                   title="What this shows. Printed in the PDF and Excel reports. Press Enter or click away to save."
+                   hx-post="{% url 'audits:attachment_note' item.pk %}" hx-trigger="change">
+          {% elif item.note %}
+            <span class="font-semibold" title="Note: printed in the reports">{{ item.note }}</span>
+          {% endif %}
+          <span class="truncate{% if not item.note %} font-semibold{% endif %}" title="{{ item.original_name }}">{{ item.original_name }}</span>
+          <span class="text-base-content/70">{{ item.uploaded_by.full_name }} · {{ item.uploaded_at|date:"d M Y H:i" }} · {{ item.size|filesizeformat }}</span>
+          <div class="flex flex-wrap items-center gap-2">
+            {% if item.kind == "photo" %}
+              {% if item.can_tick %}
+                <label class="tooltip label cursor-pointer gap-1 text-xs" data-tip="Tick to print this photo in the audit PDF">
+                  <input type="checkbox" name="include" class="checkbox checkbox-xs checkbox-primary" {% if item.include_in_report %}checked{% endif %}
+                         hx-post="{% url 'audits:attachment_report' item.pk %}" hx-trigger="change">
+                  In report
+                </label>
+              {% elif item.include_in_report %}
+                <span class="badge badge-xs badge-soft badge-primary" title="This photo is printed in the audit PDF">In report</span>
+              {% endif %}
+            {% endif %}
+            {% if item.can_remove %}
+              <button type="button" class="link link-error ml-auto" hx-post="{% url 'audits:attachment_remove' item.pk %}"
+                      hx-confirm="Remove “{{ item.original_name }}”? It is hidden, kept on the server, and logged." title="Hide this file (kept on the server and in the activity log)">Remove</button>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-base-content/60">No photos or files yet.</p>
+  {% endif %}
+
+  {% if can_add %}
+    <form hx-post="{% url 'audits:media_panel' target target_pk %}" hx-encoding="multipart/form-data"
+          x-data="{ busy: false, pct: 0, tooMany: false }"
+          @submit="if (tooMany) $event.preventDefault()"
+          @htmx:before-request="if (tooMany) { $event.preventDefault() } else { busy = true; pct = 0 }"
+          @htmx:after-request="busy = false"
+          @htmx:xhr:progress="pct = Math.round($event.detail.loaded / $event.detail.total * 100)"
+          class="flex flex-wrap items-center gap-2">
+      <span class="tooltip" data-tip="Photos JPG / PNG / HEIC up to 10 MB (made smaller), videos MP4 / MOV / WEBM up to 100 MB, files PDF / DOCX / XLSX up to 5 MB. Up to 20 at once. On a phone you can take a photo.">
+        <input type="file" name="files" multiple required accept="{{ accept }},image/*" class="file-input file-input-sm" aria-label="Add photos, videos or files"
+               @change="tooMany = $event.target.files.length > {{ max_files }}">
+      </span>
+      <label class="sr-only" for="media-note-{{ target }}-{{ target_pk }}">Note for these files</label>
+      <span class="tooltip" data-tip="Say what the photo or file shows. It is printed in the PDF and Excel reports. Goes on every file in this upload; you can change it per file later.">
+        <input type="text" id="media-note-{{ target }}-{{ target_pk }}" name="note" maxlength="{{ note_max }}" class="input input-sm w-64 max-w-full"
+               placeholder="Note, e.g. Damaged box, rack B3">
+      </span>
+      <p x-show="tooMany" x-cloak class="w-full text-sm text-error">Pick at most {{ max_files }} files at a time.</p>
+      <button type="submit" class="btn btn-sm btn-primary" :disabled="busy || tooMany" title="Upload the chosen files">
+        <span x-show="!busy">Add</span><span x-show="busy" x-cloak>Uploading… <span x-text="pct + '%'"></span></span>
+      </button>
+    </form>
+  {% endif %}
+</div>

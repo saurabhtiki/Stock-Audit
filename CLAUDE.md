@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 4 (query replies/updates, actions, close/reopen, carry forward, item history, My pending items) done. Next: plan Phase 5 (locking/reopen audit, media, reports).
+Phase 6 (dashboard with 5 tabs + charts, Admin backup zip, 7-day reminder, restore_backup command) done. Next: plan Phase 7 (pilot polish: move other lists to table component, local CDN copies).
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

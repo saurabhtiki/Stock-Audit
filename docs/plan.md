@@ -10,6 +10,13 @@ uv run python manage.py runserver
 uv run pytest                             # tests
 ```
 Pick the environment with `DJANGO_ENV` (default `development`).
+
+Restore a backup zip (Admin → Backup) on a test PC — the old database and media are kept as
+`*.before-restore-<time>`; refused on production unless `--force`:
+```
+DJANGO_ENV=test uv run python manage.py restore_backup stock-audit-production-full-20261106-1610.zip
+uv run python manage.py migrate      # only if the app is newer than the backup
+```
 Production: copy `.env.production.example` → `.env.production`, set a long random `SECRET_KEY`,
 then `uv run python manage.py collectstatic`.
 
@@ -373,3 +380,152 @@ Media attached to queries or actions, locking, PDF, full dashboards (ageing, ove
 - reopen needs a reason and right; status back to Open; log row written
 - "My pending items" shows only what the user can act on
 - every step writes a log row
+
+---
+
+## Phase 5 — Locking, media, reports (DONE — 238 tests pass)
+
+Built notes: lock / reopen in `audits/lock_views.py`; media checks in `audits/media.py`, screens and the
+safe file view in `audits/media_views.py`; Excel + PDF in `audits/reports.py` (`report_views.py`).
+New rights checks are in `audits/permissions.py` (`can_lock`, `can_reopen_audit`, `can_add_media`,
+`can_remove_media`, `can_view_reports`). Line photos sit in each line's remarks window; query and action
+photos on the query page. Videos support “Range” requests so iPhones can play them.
+New packages: `reportlab`, `pillow-heif`. Tests: `tests/test_lock_media_reports.py`.
+
+Goal: acceptance criteria 8 and 9 — lock and reopen audits with a logged reason, attach photos / videos /
+files, and export Excel and PDF that match the screen. Also closes a security gap: `/media/` is now served
+to anyone with the link (`config/urls.py`); after this phase media is served only after a permission check.
+
+Example: Anil attaches a photo of a damaged carton to ITM-007 from his phone camera and ticks
+*"include in report"*. Ravi (Manager, lock right) opens Lock and sees *"1,000 lines · 40 not counted ·
+56 queries: 50 Closed, 6 still open (these will carry forward) · 12 photos"*, ticks and locks. Priya can
+still reply to the 6 open queries. Later Admin reopens "Aug26" with the reason *"Count sheet was wrong
+for 3 lines"*; it goes back to Checking Done and the log shows who and why. Ravi downloads the PDF with
+the photo and the signature block.
+
+### Decisions (from grilling — all recommended answers confirmed)
+| # | Decision |
+|---|---|
+| 1 | Phase 5 = lock / reopen + media + reports. **Dashboards and backup move to Phase 6.** |
+| 2 | **Lock**: needs `lock_audit` in that Branch, only from **Checking Done**. Confirm screen with summary (lines, not counted, queries Closed / still open, photos) + tick. |
+| 3 | Lock freezes **remarks, media, Closed queries (with their actions)** and blocks **cancel**. Counts are already fixed since Checking Done. |
+| 4 | **Open queries stay fully workable after lock** (reply, updates, actions, close), from the old audit and the next one. Replaces Phase 4 decision 10. A Closed query of a locked audit can't be reopened until the audit is reopened. |
+| 5 | **Reopen**: **Admin only**, reason required, back to **Checking Done**. Counts stay fixed; remarks and media editable again; Closed queries can be reopened again. Lock / reopen can repeat; every one logged with reason. |
+| 6 | Media attaches to the **audit, a count line, a query, or an action**. Audit / line media need `upload_media`. Query / action media: also anyone with `reply_queries` or `manage_actions` in that Branch. Viewers see, can't upload. |
+| 7 | **Photos**: JPG / PNG / **HEIC** (new package `pillow-heif`), 10 MB each, shrunk to max 1600 px and saved as JPEG. "Include in report" tick, **off** by default. Phone: picker offers Camera or Gallery; several at once. |
+| 8 | **Videos**: MP4 / MOV / WEBM, 100 MB. **Files**: PDF / DOCX / XLSX, 5 MB. Kept as uploaded. File type checked by extension **and** content. |
+| 9 | **Remove media**: uploader or Admin, until Locked. Soft delete (hidden, file stays on disk), logged. |
+| 10 | Disk: `media/<env>/attachments/<year>/<month>/<random name>`; database keeps path, type, size, original name. |
+| 11 | **Viewing**: photo thumbnail → full size; video plays in browser (🎬 icon, no thumbnail); PDF / DOCX / XLSX download. |
+| 12 | **Serving media**: only through a permission-checked view (any right in that Branch); no right → 404. Public `/media/` route removed. Company logos and user photos: any logged-in user. |
+| 13 | **Excel export** per audit (.xlsx): sheets Lines, Remarks, Queries, Actions, Activity log (that audit). All rows. Needs `view_reports`. |
+| 14 | **PDF** per audit (A4, `reportlab`): summary incl. Not counted, variances, line + general remarks, query + action status, selected photos, signature block. Needs `view_reports`. Allowed from **ERP Frozen** on; not Locked → *"DRAFT – not locked"* on every page. |
+| 15 | PDF photos: only ticked ones, at the end, 2 per row, caption = item code or "General", uploader, date. Max 100, with a note if more were ticked. |
+| 16 | **Signature block**: Auditor (who did Checking Done), Stockkeeper (optional name typed on the Download PDF form, else blank line), Manager (who locked, else blank). |
+
+### What gets built
+1. **Lock / reopen**: views + confirm screens on the audit page; stage → Locked / back to Checking Done; logged.
+   One central check (`audits/permissions.py`) used by every edit view (remarks, media, closed-query reopen, cancel).
+   Phase 4 query rules changed so open queries keep working after lock.
+2. **`Attachment` model**: audit, optional line / query / action, kind (photo / video / file), original name,
+   stored path, size, include-in-report, uploaded by / at, deleted flag. No hard deletes.
+3. **Upload + list** (HTMX) on the audit page and the line / query / action panels; thumbnails for photos;
+   include-in-report toggle; remove button.
+4. **Media serve view** with permission check; replaces `/media/` in `config/urls.py` (logos / profile photos keep a login-only route).
+5. **Excel export** (`openpyxl`) — button on the audit page.
+6. **PDF export** (`reportlab`, new) in `audits/reports.py` — "Download PDF" form with optional Stockkeeper name.
+7. New packages: `reportlab`, `pillow-heif`.
+8. Tooltips on every new button and box; every change logged.
+
+### Not in this phase
+Dashboards (status grid, ageing, overdue, trends, repeat items), backup zip, moving the other list screens
+to the table component.
+
+### Tests
+- lock: only from Checking Done; needs `lock_audit` in that Branch; Draft / Frozen refused; log row
+- reopen: Admin only; reason required; back to Checking Done; counts still fixed; log row
+- locked: remark add / edit / delete, media add / remove / tick, closed-query reopen, cancel → refused
+- locked: open query can still be replied to, get actions, be closed; still carries forward
+- media: wrong type / fake extension refused; size limits (10 MB / 100 MB / 5 MB); photo stored as JPEG ≤ 1600 px; HEIC converted
+- media: random name in year/month folder; soft delete hides it, file stays; logged
+- upload rights: audit / line need `upload_media`; query / action also allow reply / action rights; Viewer refused
+- serve: no Branch right → 404; old `/media/attachments/...` URL no longer works; logo still loads
+- Excel: 5 sheets; row counts match the database; values match the screen
+- PDF: valid PDF; "DRAFT" when not locked, not when locked; Not counted total present; only ticked photos; signature names; needs `view_reports`
+
+---
+
+## Phase 6 — Dashboards and backup (DONE — 302 tests pass)
+
+Built notes: numbers in `audits/dashboards.py`, screen in `audits/dashboard_views.py` (URL `/dashboard/<tab>/`),
+charts drawn by `static/js/dashboard.js` (Chart.js from CDN; if it can't load, the tables still show).
+The table component got a `keep=` option so the status grid keeps the dashboard filters in its links.
+Backup: `core/backup.py`, `core/backup_views.py` (Admin → Backup), `BackupLog` model, banner via
+`core.context_processors.backup_reminder`. Restore: `core/management/commands/restore_backup.py`.
+Open queries / ageing count queries raised by audits inside the month range. Trend opens on the Branch
+of the latest counted audit. Tests: `tests/test_dashboards_backup.py`.
+
+Goal: section 5 dashboards and acceptance criterion 10 — Admin downloads a backup zip and it restores
+correctly on a test server.
+
+Example: Ravi (view rights in Branches A and B) opens **Dashboard → Variance**, picks Apr–Oct and type
+Scheduled, and sees Branch A: Excess ₹12,400 · Shortage ₹18,900 · Net −₹6,500 for Aug. On **Repeat items**
+he sees ITM-007 short in 3 audits in a row at Branch A. Admin sees the amber banner *"No backup for 9 days"*,
+clicks **Download backup (database + media)**, and later restores the zip on a test PC with
+`uv run python manage.py restore_backup backup.zip`.
+
+### Decisions (from grilling — all recommended answers confirmed)
+| # | Decision |
+|---|---|
+| 1 | Phase 6 = dashboards + backup only. Moving other list screens to the table component and local CDN copies wait for a later small phase. |
+| 2 | Dashboards need `view_reports`; data only from Branches where the user has it, in the current company. Admin sees all Branches of that company. |
+| 3 | One **Dashboard** page (top bar) with 5 tabs: Audit status · Queries & actions · Variance · Repeat items · Trend. "My pending items" stays on home. |
+| 4 | One filter bar for all tabs: Branch (tick list), month range (default last 12 months, by audit date), type All / Scheduled / Surprise. |
+| 5 | Charts with **Chart.js** (CDN); every chart has a table under it with CSV download. |
+| 6 | **Audit status grid**: Branch, title, date, type, stage, % counted, open queries; row click opens the audit; cancelled hidden unless "Show cancelled"; uses the Phase 2.2 table. |
+| 7 | **Ageing** of open (not Closed) queries per Branch: 0–7, 8–30, 31–60, 61–90, 90+ days since raised. **Overdue actions** list: action, owner, due date, days late. |
+| 8 | **Variance**: all counted lines (incl. within tolerance); Not counted left out; only audits at Checking Done or Locked. Excess, Shortage, Net = Excess − Shortage, by Branch and month. |
+| 9 | **Repeat items**: Excess / Shortage in 2+ audits in a row in the same Branch; shows item, Branch, streak, total variance value; click → item history. |
+| 10 | **Trend**: pick a Branch or an Item → line chart of excess / shortage / net per audit over time, with queries raised. |
+| 11 | **Backup**: Admin only. Two buttons: database only / database + media. Zip includes `backup_info.txt` (date, environment, app version). Database copied with SQLite's safe backup (app keeps running). |
+| 12 | Zip built in a temp folder on disk, streamed to the browser, then deleted. Screen shows expected size first. |
+| 13 | Backup screen shows last backup (when, who, which kind). No backup in 7 days (or never) → amber banner on every page, Admins only. Each download logged. |
+| 14 | **Restore**: `manage.py restore_backup <zip>` command only (no button). Allowed in development / test; production needs `--force`. Steps written below. |
+
+### What gets built
+1. `audits/dashboards.py` — one function per tab (status grid rows, ageing buckets, overdue actions,
+   variance by Branch × month, repeat-item streaks, trend series), all taking the user + filters and
+   respecting Branch rights.
+2. `audits/dashboard_views.py` + `templates/audits/dashboard.html` — tabs load by HTMX, shared filter bar
+   kept in the URL, Chart.js charts + tables with CSV, tooltips on every control.
+3. `core/backup.py` + Admin "Backup" screen — two download buttons, size estimate, last-backup info.
+   `BackupLog` model (who, when, kind, size). Banner through a context processor (Admins only).
+4. `core/management/commands/restore_backup.py` — checks the zip, stops if environment is production
+   without `--force`, replaces the database and (if present) media folder, keeps a copy of the old database.
+5. Restore steps added to "How to run" above.
+
+### Not in this phase
+Moving the other list screens to the table component, local CDN copies, scheduled/automatic backups,
+email alerts.
+
+### Tests
+- dashboards: no `view_reports` → refused; another Branch's / company's data never shows
+- status grid: % counted and open-query counts right; cancelled hidden by default
+- ageing buckets correct at the edges (7 / 8, 30 / 31 …); overdue = due passed and not Verified
+- variance: includes within-tolerance lines, excludes Not counted and Draft / Frozen audits; net = excess − shortage
+- repeat items: 2 in a row found, a gap breaks the streak, other Branch doesn't count
+- filters (Branch, months, type) change every tab; CSV matches the table
+- backup: Admin only; db-only zip has the database + info file; db+media zip also has media; log row + last-backup shown
+- banner: shows after 7 days / never, hidden after a backup, never shown to non-Admins
+- restore: zip restores into the test environment and the data matches; production refused without `--force`; bad zip refused with a clear message
+
+### Added after Phase 6 (user request — 317 tests pass)
+- **My pending items** (home page): 4 tabs — Replies to write / My actions / To verify / To close —
+  each with its count and a full table (search, column filters, sort, pages, CSV). No 50-row limit.
+  The last opened tab is remembered. Code: `audits/pending_views.py`, `partials/pending_items.html`, `pending_table.html`.
+- **Dashboard drilldown**: ▸ on a row opens the detail under it, loaded on first click.
+  Variance row → its items (biggest value first, top 50); Repeat row → every audit of that item in the Branch;
+  Trend row → that audit's biggest variance items. Ageing numbers link to the Queries list with Branch,
+  open statuses, audit dates and "Raised on" range filled in (new "Raised on" column on the Queries list).
+  Code: `dashboard_views.dashboard_detail`, `partials/dashboard_detail.html`, `dashboard_expander.html`.
+- Tests: `tests/test_pending_drilldown.py`.

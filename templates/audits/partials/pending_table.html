@@ -1,0 +1,58 @@
+{% load humanize %}
+{# The table of the open "My pending items" tab. Needs pending_tab, pending_table and today. #}
+{% with table=pending_table tab=pending_tab.name %}
+<div id="pending-table" hx-target="#pending-table" hx-swap="outerHTML">
+  {% if table.has_any_rows %}
+    {% include "partials/datatable/toolbar.html" %}
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm table-zebra data-table">
+        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <tbody>
+          {% for row in table.page %}
+            <tr>
+              <td class="dt-sticky font-bold">{{ row.branch_code }}</td>
+              <td>{{ row.audit_title }}</td>
+              {% if tab == "replies" or tab == "close" %}<td>{{ row.audit_date|date:"d M Y" }}</td>{% endif %}
+              <td>
+                <a class="link link-primary font-bold" href="{% if tab == 'replies' or tab == 'close' %}{% url 'audits:query_detail' row.pk %}{% else %}{% url 'audits:query_detail' row.query_id %}{% endif %}"
+                   title="{% if tab == 'replies' %}Open this query and write the reply{% elif tab == 'close' %}Open this query to review and close it{% elif tab == 'actions' %}Open the query of this action to mark it Done{% else %}Open the query of this action to Verify it{% endif %}">{{ row.item_code }}</a>
+              </td>
+              {% if tab == "replies" %}
+                <td class="max-w-xs truncate" title="{{ row.description }}">{{ row.description }}</td>
+                <td class="text-right {% if row.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ row.variance_qty|floatformat:"-3" }}</td>
+                <td class="text-right">{{ row.variance_value|floatformat:2|intcomma }}</td>
+                <td class="whitespace-nowrap" title="Raised {{ row.created_at|timesince }} ago ({{ row.created_at|date:'d M Y H:i' }})">{{ row.created_at|date:"d M Y" }}</td>
+              {% elif tab == "actions" %}
+                <td class="max-w-sm truncate" title="{{ row.description }}">{{ row.description }}</td>
+                <td>
+                  {% if row.due_date %}
+                    <span class="{% if row.due_date < today %}font-bold text-error{% endif %}">{{ row.due_date|date:"d M Y" }}</span>
+                    {% if row.due_date < today %}<span class="badge badge-sm badge-error" title="Due date has passed">{{ row.due_date|timesince:today }} late</span>{% endif %}
+                  {% else %}<span class="text-base-content/50" title="No due date was set">–</span>{% endif %}
+                </td>
+                <td>{{ row.created_at|date:"d M Y" }}</td>
+              {% elif tab == "verify" %}
+                <td class="max-w-sm truncate" title="{{ row.description }}">{{ row.description }}</td>
+                <td>{{ row.owner_name }}</td>
+                <td>{{ row.done_at|date:"d M Y" }}</td>
+                <td>{% if row.due_date %}{{ row.due_date|date:"d M Y" }}{% else %}–{% endif %}</td>
+              {% else %}
+                <td class="max-w-xs truncate" title="{{ row.description }}">{{ row.description }}</td>
+                <td class="text-right">{{ row.variance_value|floatformat:2|intcomma }}</td>
+                <td>{% include "audits/partials/query_status_badge.html" with status=row.status %}</td>
+                <td>{% if row.replied_at %}{{ row.replied_at|date:"d M Y" }}{% else %}–{% endif %}</td>
+                <td class="text-right">{{ row.action_count }}</td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{{ table.columns|length }}" class="py-6 text-center text-base-content/70">Nothing matches your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear all filters</a></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/datatable/pager.html" %}
+  {% else %}
+    <div role="alert" class="alert alert-soft alert-success"><span>{{ pending_tab.empty }} 🎉</span></div>
+  {% endif %}
+</div>
+{% endwith %}

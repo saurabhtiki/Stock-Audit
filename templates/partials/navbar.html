@@ -27,6 +27,7 @@
 
     <div class="navbar-end gap-1">
       {% if current_company %}
+        <a href="{% url 'audits:dashboard' %}" class="btn btn-ghost btn-sm" title="Charts and summaries: audit status, open queries, variance, repeat items, trends">Dashboard</a>
         <a href="{% url 'audits:audit_list' %}" class="btn btn-ghost btn-sm" title="Audits of your Branches">Audits</a>
         <a href="{% url 'audits:query_list' %}" class="btn btn-ghost btn-sm" title="Queries raised for Excess / Shortage lines: replies and actions">Queries</a>
         <a href="{% url 'audits:item_list' %}" class="btn btn-ghost btn-sm" title="Item list of this company">Items</a>
@@ -40,6 +41,7 @@
             <li><a href="{% url 'core:department_list' %}">Departments</a></li>
             <li><a href="{% url 'accounts:user_list' %}">Users</a></li>
             <li><a href="{% url 'core:activity_log' %}">Activity log</a></li>
+            <li><a href="{% url 'core:backup' %}" title="Download a backup zip of the database and media">Backup</a></li>
           </ul>
         </details>
       {% endif %}

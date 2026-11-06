@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Reopen audit{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Reopen</li></ul></div>
+  <div class="card bg-base-100">
+    <form method="post" class="card-body" novalidate>
+      {% csrf_token %}
+      <h1 class="text-xl font-bold">Reopen audit “{{ audit.title }}”?</h1>
+      <p class="text-sm text-base-content/70">
+        The audit goes back to <strong>Checking Done</strong>. Counts stay fixed. Remarks, photos and files can be changed again,
+        and Closed queries can be reopened. Your name, the time and the reason are saved in the activity log.
+      </p>
+      {% include "partials/field.html" with field=form.reason %}
+      <div class="mt-2 flex gap-2">
+        <button type="submit" class="btn btn-warning" title="Reopen the audit with this reason">Reopen audit</button>
+        <a href="{% url 'audits:audit_detail' audit.pk %}" class="btn btn-ghost">Keep locked</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

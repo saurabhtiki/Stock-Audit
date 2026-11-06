@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Backup{% endblock %}
+{% block content %}
+<h1 class="mb-2 text-2xl font-bold">Backup</h1>
+<p class="mb-4 text-sm text-base-content/70">
+  Download a zip of the whole group's data and keep it somewhere safe (another PC, a USB drive or cloud storage).
+  A reminder shows on every Admin page when there has been no backup for {{ reminder_days }} days.
+</p>
+
+<div class="card card-sm mb-4 bg-base-100">
+  <div class="card-body">
+    <h2 class="card-title">Last backup</h2>
+    {% if last %}
+      <p>
+        <strong>{{ last.created_at|date:"d M Y, g:i a" }}</strong> by {{ last.created_by.full_name|default:last.created_by.username }}
+        <span class="badge badge-ghost">{{ last.get_kind_display }}</span>
+        <span class="text-base-content/60">({{ last.size|filesizeformat }}, {{ last.created_at|naturaltime }})</span>
+      </p>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-warning"><span>No backup has been downloaded yet.</span></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid gap-4 sm:grid-cols-2">
+  <form method="post" action="{% url 'core:backup_download' %}" class="card card-sm bg-base-100" x-data="{ busy: false }" @submit="busy = true; setTimeout(() => busy = false, 8000)">
+    {% csrf_token %}
+    <input type="hidden" name="kind" value="database">
+    <div class="card-body">
+      <h2 class="card-title">Database only</h2>
+      <p class="text-sm text-base-content/70">All companies, users, audits, counts, queries and the activity log. No photos, videos or files. Quick and small.</p>
+      {% if sizes %}<p class="text-sm">About <strong>{{ sizes.database|filesizeformat }}</strong> before zipping.</p>{% endif %}
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary" :disabled="busy" title="Make a zip of the database and download it">
+          <span x-show="!busy">Download backup (database only)</span>
+          <span x-show="busy" x-cloak class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Preparing zip…</span>
+        </button>
+      </div>
+    </div>
+  </form>
+  <form method="post" action="{% url 'core:backup_download' %}" class="card card-sm bg-base-100" x-data="{ busy: false }" @submit="busy = true; setTimeout(() => busy = false, 15000)">
+    {% csrf_token %}
+    <input type="hidden" name="kind" value="full">
+    <div class="card-body">
+      <h2 class="card-title">Database + media</h2>
+      <p class="text-sm text-base-content/70">Everything above plus all photos, videos, files, company logos and user photos. Can be large and take a few minutes.</p>
+      {% if sizes %}<p class="text-sm">About <strong>{{ sizes.full|filesizeformat }}</strong> (media {{ sizes.media|filesizeformat }}). Check there is enough free space where you save it.</p>{% endif %}
+      <div class="card-actions">
+        <button type="submit" class="btn btn-secondary" :disabled="busy" title="Make a zip of the database and every media file, and download it">
+          <span x-show="!busy">Download backup (database + media)</span>
+          <span x-show="busy" x-cloak class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Preparing zip…</span>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if recent %}
+  <h2 class="mb-2 mt-6 text-lg font-bold">Recent backups</h2>
+  <div class="overflow-x-auto rounded-box bg-base-100">
+    <table class="table table-sm table-zebra">
+      <thead><tr><th>When</th><th>By</th><th>Kind</th><th class="text-right">Size</th><th>File name</th></tr></thead>
+      <tbody>
+        {% for entry in recent %}
+          <tr>
+            <td>{{ entry.created_at|date:"d M Y, g:i a" }}</td>
+            <td>{{ entry.created_by.full_name|default:entry.created_by.username }}</td>
+            <td>{{ entry.get_kind_display }}</td>
+            <td class="text-right">{{ entry.size|filesizeformat }}</td>
+            <td class="font-mono text-xs">{{ entry.file_name }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+<details class="collapse collapse-arrow mt-6 bg-base-100">
+  <summary class="collapse-title font-bold">How to restore a backup (IT / test server)</summary>
+  <div class="collapse-content text-sm">
+    <ol class="list-decimal space-y-1 pl-5">
+      <li>Copy the zip to the test server's project folder.</li>
+      <li>Run <code class="font-mono">uv run python manage.py restore_backup the-backup.zip</code> (with <code>DJANGO_ENV=test</code> or <code>development</code>).</li>
+      <li>The old database and media are kept next to the new ones with “before-restore” in the name.</li>
+      <li>On the live server it refuses unless <code>--force</code> is added, so data is never replaced by accident.</li>
+    </ol>
+  </div>
+</details>
+{% endblock %}

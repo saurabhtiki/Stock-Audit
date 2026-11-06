@@ -86,9 +86,15 @@ def can_remark(user, audit: Audit) -> bool:
     return audit.remarks_open and has_right(user, audit.branch, "count_and_remarks")
 
 
+QUERY_STAGES = (Audit.Stage.CHECKING_DONE, Audit.Stage.LOCKED)
+# Stages with counts: the count table, media tab and PDF are available.
+COUNT_STAGES = (Audit.Stage.ERP_FROZEN, *QUERY_STAGES)
+
+
 def queries_open(audit: Audit) -> bool:
-    """Queries can be worked on while the audit is at Checking Done (read-only once Locked)."""
-    return audit.stage == Audit.Stage.CHECKING_DONE and audit.branch.is_usable
+    """Queries can be worked on from Checking Done. Locking freezes only Closed queries;
+    open ones stay live and carry forward."""
+    return audit.stage in QUERY_STAGES and audit.branch.is_usable
 
 
 def can_reply(user, query) -> bool:
@@ -122,6 +128,70 @@ def can_mark_done(user, action) -> bool:
 
 def can_verify_close(user, query) -> bool:
     return queries_open(query.audit) and has_right(user, query.audit.branch, "verify_close_queries")
+
+
+def can_reopen_query(user, query) -> bool:
+    """A Closed query of a Locked audit stays frozen until Admin reopens the audit."""
+    return query.is_closed and not query.audit.is_locked and can_verify_close(user, query)
+
+
+# ---------- Lock / reopen ----------
+
+
+def can_lock(user, audit: Audit) -> bool:
+    return audit.stage == Audit.Stage.CHECKING_DONE and has_right(user, audit.branch, "lock_audit")
+
+
+def can_reopen_audit(user, audit: Audit) -> bool:
+    return user.is_admin and audit.is_locked and audit.branch.is_usable
+
+
+# ---------- Media ----------
+
+MEDIA_RIGHTS = ("upload_media", "reply_queries", "manage_actions")
+
+
+def media_open(audit: Audit, query=None) -> bool:
+    """Media can change: audit / line media from ERP Frozen until Locked; query / action
+    media while the query is not Closed (open queries stay live after lock)."""
+    if not audit.branch.is_usable:
+        return False
+    if query is not None:
+        return queries_open(query.audit) and not query.is_closed
+    return audit.remarks_open
+
+
+def can_add_media(user, audit: Audit, query=None) -> bool:
+    """Audit / line: “Media” right. Query / action: also the Reply or Actions right."""
+    if not media_open(audit, query):
+        return False
+    rights = MEDIA_RIGHTS if query is not None else ("upload_media",)
+    return any(has_right(user, audit.branch, right) for right in rights)
+
+
+def can_remove_media(user, attachment) -> bool:
+    """The uploader or Admin, while the media is still open."""
+    if attachment.is_deleted or not media_open(attachment.audit, attachment.query):
+        return False
+    return user.is_admin or (
+        attachment.uploaded_by_id == user.pk
+        and can_add_media(user, attachment.audit, attachment.query)
+    )
+
+
+def can_tick_report(user, attachment) -> bool:
+    """Choose photos for the PDF: frozen once the audit is Locked, so a signed PDF stays the same."""
+    return not attachment.audit.is_locked and can_add_media(
+        user, attachment.audit, attachment.query
+    )
+
+
+def can_view_reports(user, audit: Audit) -> bool:
+    return audit.stage != Audit.Stage.CANCELLED and has_right(user, audit.branch, "view_reports")
+
+
+def can_download_pdf(user, audit: Audit) -> bool:
+    return audit.stage in COUNT_STAGES and can_view_reports(user, audit)
 
 
 def can_change_remark(user, remark) -> bool:

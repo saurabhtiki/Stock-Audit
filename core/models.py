@@ -133,3 +133,31 @@ class ActivityLog(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("The activity log cannot be deleted.")
+
+
+class BackupLog(models.Model):
+    """One backup zip downloaded by Admin. Used for “Last backup” and the 7-day reminder."""
+
+    class Kind(models.TextChoices):
+        DATABASE = "database", "Database only"
+        FULL = "full", "Database + media"
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    size = models.PositiveBigIntegerField(help_text="Size of the zip in bytes.")
+    file_name = models.CharField(max_length=100)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "backup"
+
+    def __str__(self) -> str:
+        return f"{self.file_name} ({self.get_kind_display()})"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Backup records are never deleted.")

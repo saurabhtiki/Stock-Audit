@@ -385,7 +385,7 @@ def test_pending_items_per_user(raised, replier, boss, doer, company_a):
     assert list(query_logic.pending_for(doer, company_a)["my_actions"]) == []
 
     home = client_for(boss).get(reverse("core:home")).content.decode()
-    assert "Actions to verify" in home
+    assert "To verify" in home and "A100" in home  # opens on the first tab with work in it
 
 
 def test_queries_never_deleted(raised):

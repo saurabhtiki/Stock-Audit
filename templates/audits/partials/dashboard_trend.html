@@ -1,0 +1,55 @@
+{% load humanize %}
+<div class="card card-sm bg-base-100">
+  <div class="card-body">
+    <form hx-get="{{ request.path }}" hx-target="#dashboard" hx-push-url="true" class="flex flex-wrap items-end gap-3">
+      {% for name, value in filters.as_params %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      <label class="flex flex-col text-xs" title="Show the trend of one Branch (used when no item code is typed)">
+        Branch
+        <select name="trend_branch" class="select select-sm w-48">
+          {% for branch in filters.branches %}<option value="{{ branch.pk }}" {% if trend_branch.pk == branch.pk %}selected{% endif %}>{{ branch.code }} – {{ branch.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <span class="pb-2 text-sm text-base-content/60">or</span>
+      <label class="flex flex-col text-xs" title="Type an item code to see that item across the picked Branches. Leave empty for the Branch trend.">
+        Item code
+        <input type="search" name="item" value="{{ item_code }}" placeholder="e.g. ITM-007" class="input input-sm w-44" autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn-sm btn-secondary" title="Show the trend">Show</button>
+      <span class="flex-1"></span>
+      {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url csv_tip="Download the points of this trend as CSV" %}
+    </form>
+    {% if item_missing %}
+      <div role="alert" class="alert alert-soft alert-warning py-2 text-sm"><span>No item “{{ item_code }}” in this company. Showing the Branch trend instead.</span></div>
+    {% endif %}
+    <h2 class="card-title mt-2">
+      {% if item %}Item {{ item.code }} <span class="text-sm font-normal text-base-content/60">{{ item.description }}</span>
+      {% else %}Branch {{ trend_branch.code }} <span class="text-sm font-normal text-base-content/60">{{ trend_branch.name }}</span>{% endif %}
+    </h2>
+    {% if rows %}
+      <div class="h-72"><canvas data-chart="trend-chart" aria-label="Variance per audit over time"></canvas></div>
+      {{ chart|json_script:"trend-chart" }}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr>{% if not item %}<th class="w-8"><span class="sr-only">Details</span></th>{% endif %}<th>Audit</th><th>Date</th><th>Type</th><th class="text-right">Excess</th><th class="text-right">Shortage</th><th class="text-right">Net</th><th class="text-right">Queries</th></tr></thead>
+          {% for row in rows %}
+            <tbody x-data="{ open: false }">
+              <tr>
+                {% if not item %}<td>{% include "audits/partials/dashboard_expander.html" with detail_url=row.detail_url detail_id=row.detail_id expander_tip="Show the biggest variance items of this audit" %}</td>{% endif %}
+                <td><a class="link link-primary font-bold" href="{% url 'audits:audit_detail' row.audit_id %}" title="Open this audit">{{ row.label }}</a></td>
+                <td>{{ row.audit_date|date:"d M Y" }}</td>
+                <td>{{ row.audit_type }}</td>
+                <td class="text-right text-success">{{ row.excess|floatformat:2|intcomma }}</td>
+                <td class="text-right text-error">{{ row.shortage|floatformat:2|intcomma }}</td>
+                <td class="text-right font-bold {% if row.net < 0 %}text-error{% endif %}">{{ row.net|floatformat:2|intcomma }}</td>
+                <td class="text-right">{{ row.queries }}</td>
+              </tr>
+              {% if not item %}<tr x-show="open" x-cloak><td colspan="8" class="bg-base-200 p-3"><div id="{{ row.detail_id }}"><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>{% endif %}
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-info"><span>No counted audits (Checking Done or Locked) for this choice in these months.</span></div>
+    {% endif %}
+  </div>
+</div>

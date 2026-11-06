@@ -34,6 +34,14 @@
         {% endfor %}
       </div>
     {% endif %}
+    {% if backup_reminder %}
+      <div role="alert" class="alert alert-soft alert-warning mb-4" id="backup-reminder">
+        <span>
+          {% if backup_reminder.days %}No backup for {{ backup_reminder.days }} days.{% else %}No backup has been downloaded yet.{% endif %}
+          <a href="{% url 'core:backup' %}" class="link font-bold" title="Open the Backup page to download a zip">Download one now</a>.
+        </span>
+      </div>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 </body>

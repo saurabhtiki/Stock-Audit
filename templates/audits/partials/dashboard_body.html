@@ -1,0 +1,66 @@
+{# Filter bar + tabs + the active tab. Swapped as a whole when a filter or tab changes. #}
+<form hx-get="{{ request.path }}" hx-target="#dashboard" hx-push-url="true"
+      class="card card-sm mb-3 bg-base-100" aria-label="Dashboard filters">
+  <div class="card-body flex-row flex-wrap items-end gap-3">
+    <details class="dropdown">
+      <summary class="btn btn-sm btn-outline btn-primary" title="Pick which Branches to include">
+        Branch:
+        {% if filters.branches|length == filters.allowed|length %}All ({{ filters.allowed|length }}){% else %}{{ filters.branches|length }} of {{ filters.allowed|length }}{% endif %}
+      </summary>
+      <ul class="menu dropdown-content z-20 mt-1 max-h-72 w-60 flex-nowrap overflow-y-auto rounded-box bg-base-100 p-2 shadow">
+        {% for branch in filters.allowed %}
+          <li><label class="flex gap-2" title="{{ branch.name }}">
+            <input type="checkbox" class="checkbox checkbox-sm" name="branch" value="{{ branch.pk }}" {% if branch.pk in filters.branch_ids and filters.branches|length != filters.allowed|length %}checked{% endif %}>
+            <span class="font-bold">{{ branch.code }}</span> {{ branch.name }}
+          </label></li>
+        {% endfor %}
+        <li class="menu-title text-xs font-normal">None ticked = all Branches</li>
+      </ul>
+    </details>
+    <label class="flex flex-col text-xs" title="First month to include (by audit date)">
+      From
+      <input type="month" name="from" value="{{ filters.month_from|date:'Y-m' }}" class="input input-sm w-40">
+    </label>
+    <label class="flex flex-col text-xs" title="Last month to include (by audit date)">
+      To
+      <input type="month" name="to" value="{{ filters.month_to|date:'Y-m' }}" class="input input-sm w-40">
+    </label>
+    <label class="flex flex-col text-xs" title="Surprise checks can be looked at on their own">
+      Type
+      <select name="type" class="select select-sm w-36">
+        <option value="">All</option>
+        {% for value, label in audit_types %}<option value="{{ value }}" {% if filters.audit_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if tab == "status" %}
+      <label class="label cursor-pointer gap-2 text-sm" title="Also list cancelled audits">
+        <input type="checkbox" class="checkbox checkbox-sm" name="cancelled" value="1" {% if show_cancelled %}checked{% endif %}> Show cancelled
+      </label>
+    {% endif %}
+    {% if tab == "trend" %}
+      {# Keep the trend choice when the filters change. #}
+      {% if item_code %}<input type="hidden" name="item" value="{{ item_code }}">{% elif trend_branch %}<input type="hidden" name="trend_branch" value="{{ trend_branch.pk }}">{% endif %}
+    {% endif %}
+    <button type="submit" class="btn btn-sm btn-primary" title="Show the dashboard with these filters">Apply</button>
+    <a href="{{ request.path }}" hx-get="{{ request.path }}" hx-target="#dashboard" hx-push-url="true" class="btn btn-sm btn-ghost" title="Back to all Branches, last 12 months, all types">Reset</a>
+  </div>
+</form>
+{% for error in filters.errors %}
+  <div role="alert" class="alert alert-soft alert-warning mb-2 py-2 text-sm"><span>{{ error }}</span></div>
+{% endfor %}
+
+<div role="tablist" class="tabs tabs-box mb-3 flex-nowrap overflow-x-auto">
+  {% for item in tabs %}
+    <a role="tab" href="{{ item.url }}" hx-get="{{ item.url }}" hx-target="#dashboard" hx-push-url="true"
+       class="tab whitespace-nowrap {% if item.name == tab %}tab-active font-bold{% endif %}" title="{{ item.tip }}"
+       {% if item.name == tab %}aria-selected="true"{% endif %}>{{ item.label }}</a>
+  {% endfor %}
+</div>
+
+<section aria-live="polite">
+  {% if tab == "status" %}{% include "audits/partials/dashboard_status_table.html" %}
+  {% elif tab == "queries" %}{% include "audits/partials/dashboard_queries.html" %}
+  {% elif tab == "variance" %}{% include "audits/partials/dashboard_variance.html" %}
+  {% elif tab == "repeat" %}{% include "audits/partials/dashboard_repeat.html" %}
+  {% else %}{% include "audits/partials/dashboard_trend.html" %}{% endif %}
+</section>

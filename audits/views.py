@@ -18,14 +18,19 @@ from audits.count_views import attach_remark_counts
 from audits.forms import AuditForm, CancelForm, FreezeForm, ItemForm, UploadForm
 from audits.models import Audit, AuditLine, ErpUpload, Item
 from audits.permissions import (
+    COUNT_STAGES,
     branches_with_right,
     can_cancel_audit,
     can_count,
+    can_download_pdf,
     can_edit_audit,
     can_freeze,
+    can_lock,
     can_manage_items,
     can_remark,
+    can_reopen_audit,
     can_upload,
+    can_view_reports,
     forbidden,
     get_visible_audit,
     has_counts,
@@ -157,7 +162,6 @@ COUNT_SHORTCUTS = [
     ("Shortage", "count_status", "shortage", "Counted less than ERP, beyond tolerance"),
     ("OK", "count_status", "ok", "Counted, and the difference is within tolerance"),
 ]
-COUNT_STAGES = (Audit.Stage.ERP_FROZEN, Audit.Stage.CHECKING_DONE, Audit.Stage.LOCKED)
 
 
 def _lines_table(request, audit) -> DataTable:
@@ -221,6 +225,11 @@ def audit_detail(request, pk):
                 "can_upload": can_upload(user, audit),
                 "can_freeze": can_freeze(user, audit) and totals["count"] > 0,
                 "can_cancel": can_cancel,
+                "can_lock": can_lock(user, audit),
+                "can_reopen": can_reopen_audit(user, audit),
+                "can_reports": can_view_reports(user, audit),
+                "can_pdf": can_download_pdf(user, audit),
+                "media_tab": audit.stage in COUNT_STAGES,
                 "cancel_blocked": (
                     not can_cancel
                     and user.is_admin

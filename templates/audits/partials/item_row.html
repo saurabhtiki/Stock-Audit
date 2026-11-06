@@ -2,7 +2,7 @@
   {% if can_manage %}
     <td class="dt-sticky dt-lead">
       {% if item.is_new %}
-        <input type="checkbox" class="checkbox checkbox-sm" data-review-id="{{ item.pk }}" aria-label="Tick {{ item.code }}" title="Tick to mark several New items reviewed together"
+        <input type="checkbox" class="checkbox checkbox-sm" data-pick-id="{{ item.pk }}" aria-label="Tick {{ item.code }}" title="Tick to mark several New items reviewed together"
                :checked="isTicked('{{ item.pk }}')" @change="tick('{{ item.pk }}', $el.checked)">
       {% endif %}
     </td>

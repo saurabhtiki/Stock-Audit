@@ -1,0 +1,6 @@
+{# The ▸ button that opens a row's detail. Needs detail_url, detail_id and expander_tip. Put it inside a <tbody x-data="{ open: false }">. #}
+<button type="button" class="btn btn-ghost btn-xs btn-square" @click="open = !open" :aria-expanded="open"
+        hx-get="{{ detail_url }}" hx-target="#{{ detail_id }}" hx-trigger="click once" hx-push-url="false"
+        title="{{ expander_tip }}" aria-label="{{ expander_tip }}" aria-controls="{{ detail_id }}">
+  <svg class="h-4 w-4 transition-transform" :class="open && 'rotate-90'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+</button>

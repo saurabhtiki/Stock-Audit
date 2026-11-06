@@ -6,9 +6,11 @@ urlpatterns = [
     path("", include("core.urls")),
     path("accounts/", include("accounts.urls")),
     path("", include("audits.urls")),
-    # Media (logos, later photos) is served by Django in every environment.
-    # Login is required for it, like every other page.
-    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
+    # Only company logos and profile photos are served straight from /media/ (login required,
+    # like every page). Audit attachments are served by audits.media_views after a Branch check.
+    re_path(
+        r"^media/(?P<path>(?:logos|users)/[^/]+)$", serve, {"document_root": settings.MEDIA_ROOT}
+    ),
 ]
 
 if getattr(settings, "DJANGO_ADMIN_ENABLED", False):

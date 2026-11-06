@@ -1,10 +1,25 @@
 from django.urls import path
 
-from audits import count_views, query_views, views
+from audits import (
+    count_views,
+    dashboard_views,
+    lock_views,
+    media_views,
+    query_views,
+    report_views,
+    views,
+)
 
 app_name = "audits"
 urlpatterns = [
     path("audits/", views.audit_list, name="audit_list"),
+    path("dashboard/", dashboard_views.dashboard, name="dashboard"),
+    path(
+        "dashboard/detail/<str:kind>/",
+        dashboard_views.dashboard_detail,
+        name="dashboard_detail",
+    ),
+    path("dashboard/<str:tab>/", dashboard_views.dashboard, name="dashboard_tab"),
     path("audits/new/", views.audit_create, name="audit_create"),
     path("audits/erp-template/", views.erp_template, name="erp_template"),
     path("audits/<int:pk>/", views.audit_detail, name="audit_detail"),
@@ -12,6 +27,15 @@ urlpatterns = [
     path("audits/<int:pk>/upload/", views.erp_upload, name="erp_upload"),
     path("audits/<int:pk>/freeze/", views.audit_freeze, name="audit_freeze"),
     path("audits/<int:pk>/cancel/", views.audit_cancel, name="audit_cancel"),
+    path("audits/<int:pk>/lock/", lock_views.audit_lock, name="audit_lock"),
+    path("audits/<int:pk>/reopen/", lock_views.audit_reopen, name="audit_reopen"),
+    path("audits/<int:pk>/report.xlsx", report_views.audit_excel, name="audit_excel"),
+    path("audits/<int:pk>/report.pdf", report_views.audit_pdf, name="audit_pdf"),
+    path("attachments/<str:target>/<int:pk>/", media_views.media_panel, name="media_panel"),
+    path("attachment/<int:pk>/file/", media_views.attachment_file, name="attachment_file"),
+    path("attachment/<int:pk>/remove/", media_views.attachment_remove, name="attachment_remove"),
+    path("attachment/<int:pk>/note/", media_views.attachment_note, name="attachment_note"),
+    path("attachment/<int:pk>/report/", media_views.attachment_report, name="attachment_report"),
     path("uploads/<int:pk>/", views.upload_preview, name="upload_preview"),
     path("audits/<int:pk>/count-stats/", count_views.count_stats, name="count_stats"),
     path("audits/<int:pk>/count-sheet/", count_views.count_sheet, name="count_sheet"),
@@ -27,6 +51,7 @@ urlpatterns = [
     path("remarks/<int:pk>/edit/", count_views.remark_edit, name="remark_edit"),
     path("remarks/<int:pk>/delete/", count_views.remark_delete, name="remark_delete"),
     path("queries/", query_views.query_list, name="query_list"),
+    path("queries/bulk/", query_views.query_bulk, name="query_bulk"),
     path("queries/<int:pk>/", query_views.query_detail, name="query_detail"),
     path("queries/<int:pk>/reply/", query_views.query_reply, name="query_reply"),
     path("queries/<int:pk>/reply/edit/", query_views.query_reply_edit, name="query_reply_edit"),

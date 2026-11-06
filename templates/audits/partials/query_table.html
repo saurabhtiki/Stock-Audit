@@ -1,14 +1,26 @@
 {% load humanize %}
-<div id="query-table" hx-target="#query-table" hx-swap="outerHTML">
+<div id="query-table" hx-target="#query-table" hx-swap="outerHTML"
+     {% if can_bulk %}data-matching="{{ matching_count }}" data-filters="{{ table.filter_query }}" data-filtered="{{ table.active_count }}" x-init="tableLoaded($el)"{% endif %}>
   {% if table.has_any_rows %}
     {% include "partials/datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
-        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <thead><tr>
+          {% if can_bulk %}<th class="dt-sticky dt-lead">{% if pickable_ids %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all open queries on this page" title="Tick or untick all open queries on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}
+          {% include "partials/datatable/head_cells.html" with lead_column=can_bulk %}
+        </tr></thead>
         <tbody>
           {% for query in table.page %}
             <tr>
-              <td class="dt-sticky font-bold">{{ query.branch_code }}</td>
+              {% if can_bulk %}
+                <td class="dt-sticky dt-lead">
+                  {% if query.pk in pickable_ids %}
+                    <input type="checkbox" class="checkbox checkbox-sm" data-pick-id="{{ query.pk }}" aria-label="Tick query {{ query.item_code }}" title="Tick to reply to or close several queries together"
+                           :checked="isTicked('{{ query.pk }}')" @change="tick('{{ query.pk }}', $el.checked)">
+                  {% endif %}
+                </td>
+              {% endif %}
+              <td class="dt-sticky{% if can_bulk %} dt-after-lead{% endif %} font-bold">{{ query.branch_code }}</td>
               <td>{{ query.audit_title }}</td>
               <td>{{ query.audit_date|date:"d M Y" }}</td>
               <td><a class="link link-primary font-bold" href="{% url 'audits:query_detail' query.pk %}" title="Open this query: reply, actions, history">{{ query.item_code }}</a></td>
@@ -16,11 +28,12 @@
               <td class="text-right {% if query.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ query.variance_qty|floatformat:"-3" }}</td>
               <td class="text-right">{{ query.variance_value|floatformat:2|intcomma }}</td>
               <td>{% include "audits/partials/query_status_badge.html" with status=query.status %}</td>
+              <td title="{{ query.created_at|date:'d M Y H:i' }}">{{ query.created_at|date:"d M Y" }}</td>
               <td class="text-right">{{ query.open_actions }}</td>
               <td class="text-right">{% if query.overdue_actions %}<span class="tooltip" data-tip="Actions past their due date and not Verified"><span class="badge badge-error">{{ query.overdue_actions }}</span></span>{% else %}0{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="10" class="py-6 text-center text-base-content/70">No queries match your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear all filters</a></td></tr>
+            <tr><td colspan="12" class="py-6 text-center text-base-content/70">No queries match your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear all filters</a></td></tr>
           {% endfor %}
         </tbody>
       </table>

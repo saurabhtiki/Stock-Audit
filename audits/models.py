@@ -97,6 +97,10 @@ class Audit(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
     checking_done_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    locked_at = models.DateTimeField(null=True, blank=True)
 
     objects = NoDeleteQuerySet.as_manager()
 
@@ -130,6 +134,10 @@ class Audit(models.Model):
     def remarks_open(self) -> bool:
         """Remarks can be added or changed (after freezing, until Locked)."""
         return self.stage in (self.Stage.ERP_FROZEN, self.Stage.CHECKING_DONE)
+
+    @property
+    def is_locked(self) -> bool:
+        return self.stage == self.Stage.LOCKED
 
     @property
     def current_upload(self):
@@ -409,3 +417,75 @@ class Action(models.Model):
             and self.status != self.Status.VERIFIED
             and self.due_date < timezone.localdate()
         )
+
+
+def attachment_path(instance, filename: str) -> str:
+    """media/<env>/attachments/<year>/<month>/<random name>.<ext>"""
+    now = timezone.now()
+    return f"attachments/{now:%Y}/{now:%m}/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
+
+
+class Attachment(models.Model):
+    """A photo, video or file on an audit, or on one of its lines, queries or actions.
+
+    Never really deleted: removing hides it and the file stays on disk.
+    Served only through audits.media_views (Branch right checked), never by a public URL.
+    """
+
+    class Kind(models.TextChoices):
+        PHOTO = "photo", "Photo"
+        VIDEO = "video", "Video"
+        FILE = "file", "File"
+
+    audit = models.ForeignKey(Audit, on_delete=models.PROTECT, related_name="attachments")
+    line = models.ForeignKey(
+        AuditLine, null=True, blank=True, on_delete=models.PROTECT, related_name="attachments"
+    )
+    query = models.ForeignKey(
+        Query, null=True, blank=True, on_delete=models.PROTECT, related_name="attachments"
+    )
+    action = models.ForeignKey(
+        Action, null=True, blank=True, on_delete=models.PROTECT, related_name="attachments"
+    )
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    file = models.FileField(upload_to=attachment_path, max_length=255)
+    original_name = models.CharField(max_length=255)
+    note = models.CharField(
+        max_length=200, blank=True, help_text="What the photo / file shows, printed in reports."
+    )
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveBigIntegerField(help_text="Bytes stored on disk.")
+    include_in_report = models.BooleanField(
+        default=False, help_text="Photo is printed in the audit PDF."
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["uploaded_at", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.audit} – {self.original_name}"
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Attachments are never deleted. Remove (hide) them instead.")
+
+    @property
+    def target_label(self) -> str:
+        """Where it belongs, e.g. “ITM-007 · action” or “General”."""
+        if self.action_id:
+            return f"{self.action.query.line.item_code} · action"
+        if self.query_id:
+            return f"{self.query.line.item_code} · query"
+        if self.line_id:
+            return self.line.item_code
+        return "General"

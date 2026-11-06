@@ -1,0 +1,37 @@
+{% load humanize %}
+<div class="card card-sm bg-base-100">
+  <div class="card-body">
+    <div class="flex items-center gap-2">
+      <h2 class="card-title flex-1">Excess, shortage and net variance</h2>
+      {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url csv_tip="Download the Branch × month table as CSV" %}
+    </div>
+    <p class="text-sm text-base-content/70">
+      Value of every counted line (also small ones inside the tolerance), from audits at Checking Done or Locked. Not-counted lines are left out.
+      Net = Excess − Shortage.
+    </p>
+    {% if rows %}
+      <div class="h-72"><canvas data-chart="variance-chart" aria-label="Excess, shortage and net variance per month"></canvas></div>
+      {{ chart|json_script:"variance-chart" }}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th class="w-8"><span class="sr-only">Details</span></th><th>Month</th><th>Branch</th><th class="text-right">Excess</th><th class="text-right">Shortage</th><th class="text-right">Net</th></tr></thead>
+          {% for row in rows %}
+            <tbody x-data="{ open: false }">
+              <tr>
+                <td>{% include "audits/partials/dashboard_expander.html" with detail_url=row.detail_url detail_id=row.detail_id expander_tip="Show the items behind this row" %}</td>
+                <td>{{ row.month|date:"M Y" }}</td>
+                <td class="font-bold">{{ row.branch }}</td>
+                <td class="text-right text-success">{{ row.excess|floatformat:2|intcomma }}</td>
+                <td class="text-right text-error">{{ row.shortage|floatformat:2|intcomma }}</td>
+                <td class="text-right font-bold {% if row.net < 0 %}text-error{% endif %}">{{ row.net|floatformat:2|intcomma }}</td>
+              </tr>
+              <tr x-show="open" x-cloak><td colspan="6" class="bg-base-200 p-3"><div id="{{ row.detail_id }}"><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-info"><span>No counted audits (Checking Done or Locked) in these Branches and months.</span></div>
+    {% endif %}
+  </div>
+</div>

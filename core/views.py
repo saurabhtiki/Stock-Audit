@@ -6,8 +6,10 @@ from django.core.paginator import Paginator
 from django.db import DatabaseError, connection
 from django.db.models import Count
 from django.http import JsonResponse
+from django.http.response import HttpResponseBase
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.cache import patch_vary_headers
 from django.views.decorators.http import require_POST
 
 from accounts.access import visible_branches
@@ -37,11 +39,17 @@ def health(request):
 
 
 def home(request):
-    from audits.queries import pending_for  # audits depends on core, not the other way round
+    from audits.pending_views import pending_section  # audits depends on core, not the reverse
 
-    branches = visible_branches(request.user, request.company)
-    pending = pending_for(request.user, request.company) if request.company else None
-    return render(request, "core/home.html", {"branches": branches, "pending": pending})
+    context = {"branches": visible_branches(request.user, request.company)}
+    if request.company:
+        pending = pending_section(request)
+        if isinstance(pending, HttpResponseBase):  # CSV download or an htmx table swap
+            return pending
+        context.update(pending)
+    response = render(request, "core/home.html", context)
+    patch_vary_headers(response, ["HX-Request", "HX-Target"])
+    return response
 
 
 @require_POST

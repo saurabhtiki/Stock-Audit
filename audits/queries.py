@@ -98,6 +98,16 @@ def add_update(actor, query_pk: int, text: str) -> QueryUpdate:
     return update
 
 
+def reply_or_update(actor, query_pk: int, text: str) -> str:
+    """The first text becomes the reply; later ones are dated updates under it.
+    Returns "reply" or "update" so the screen can say which one happened."""
+    if QueryReply.objects.filter(query_id=query_pk).exists():
+        add_update(actor, query_pk, text)
+        return "update"
+    submit_reply(actor, query_pk, text)
+    return "reply"
+
+
 # ---------- Actions ----------
 
 
@@ -222,9 +232,35 @@ def reopen_query(actor, query_pk: int, reason: str) -> Query:
     reason = _clean_text(reason, "reason for reopening", max_length=500)
     if not query.is_closed:
         raise QueryError("Only a Closed query can be reopened.")
+    if query.audit.is_locked:
+        raise QueryError(
+            "This audit is Locked, so its Closed queries are frozen. "
+            "Ask Admin to reopen the audit first."
+        )
     query.closed_by, query.closed_at, query.close_note = None, None, ""
     _set_status(actor, query, QS.OPEN, "reopen query", {"reason": [None, reason]})
     return query
+
+
+# ---------- Many queries at once ----------
+
+
+def bulk_change(actor, queries, change, allowed) -> tuple[list[Query], list[tuple[Query, str]]]:
+    """Run `change(actor, query_pk)` on each query the user is `allowed` to change.
+    Each query is its own save, so one refusal never undoes the others.
+    Returns (done, skipped) where skipped holds (query, reason)."""
+    done, skipped = [], []
+    for query in queries:
+        if not allowed(actor, query):
+            skipped.append((query, "you don't have the right for it here"))
+            continue
+        try:
+            change(actor, query.pk)
+        except QueryError as error:
+            skipped.append((query, str(error)))
+        else:
+            done.append(query)
+    return done, skipped
 
 
 # ---------- Lists: carry forward, item history, pending items ----------
@@ -260,9 +296,11 @@ def item_history(query: Query) -> list[AuditLine]:
 
 
 def pending_for(user, company) -> dict:
-    """What waits for this user in the company: replies, own actions, verifications, closings."""
+    """What waits for this user in the company: replies, own actions, verifications, closings.
+    Plain querysets (no limit); the home page tabs add their own columns and paging."""
     live = Query.objects.filter(
-        audit__stage=Audit.Stage.CHECKING_DONE, audit__branch__company=company
+        audit__stage__in=(Audit.Stage.CHECKING_DONE, Audit.Stage.LOCKED),
+        audit__branch__company=company,
     )
     reply_branches = branches_with_right(user, company, "reply_queries")
     verify_branches = branches_with_right(user, company, "verify_close_queries")
@@ -271,23 +309,23 @@ def pending_for(user, company) -> dict:
     return {
         "to_reply": live.filter(status=QS.OPEN, audit__branch__in=reply_branches)
         .select_related(*query_fields)
-        .order_by("created_at")[:50],
+        .order_by("created_at"),
         "my_actions": Action.objects.filter(
             owner=user, status=AS.OPEN, query__in=live.exclude(status=QS.CLOSED)
         )
         .select_related(*action_fields)
-        .order_by("due_date", "created_at")[:50],
+        .order_by("due_date", "created_at"),
         "to_verify": Action.objects.filter(
             status=AS.DONE,
             query__in=live.exclude(status=QS.CLOSED),
             query__audit__branch__in=verify_branches,
         )
         .select_related(*action_fields)
-        .order_by("done_at")[:50],
+        .order_by("done_at"),
         "to_close": live.filter(
             status__in=(QS.REPLY_SUBMITTED, QS.ACTION_PENDING), audit__branch__in=verify_branches
         )
         .exclude(actions__status__in=(AS.OPEN, AS.DONE))
         .select_related(*query_fields)
-        .order_by("created_at")[:50],
+        .order_by("created_at"),
     }

@@ -14,12 +14,12 @@
   </div>
 {% endif %}
 
-<div x-data="bulkReview" @pageshow.window="busy = false">
+<div x-data="bulkSelect({ one: 'New item', many: 'New items' })" @pageshow.window="busy = false">
   {% if can_manage %}
     {# Bulk "Mark reviewed" bar: shows once at least one New item is ticked. #}
     <form method="post" action="{% url 'audits:item_bulk_review' %}" x-show="count > 0" x-cloak
           class="alert alert-soft alert-info mb-3 flex flex-wrap items-center gap-2"
-          @submit="if (busy || !confirm(confirmText())) { $event.preventDefault() } else { busy = true }">
+          @submit="if (busy || !confirm(`${plural(count)} will be marked Reviewed. Continue?`)) { $event.preventDefault() } else { busy = true }">
       {% csrf_token %}
       <input type="hidden" name="filters" :value="filters">
       <input type="hidden" name="all_matching" :value="allMatching ? '1' : ''">
@@ -41,5 +41,5 @@
 
   {% include "audits/partials/item_table.html" %}
 </div>
-<script src="{% static 'js/item_bulk_review.js' %}"></script>
+<script src="{% static 'js/bulk_select.js' %}"></script>
 {% endblock %}

@@ -1,0 +1,35 @@
+{% load humanize %}
+<div class="card card-sm bg-base-100">
+  <div class="card-body">
+    <div class="flex items-center gap-2">
+      <h2 class="card-title flex-1">Repeat items <span class="badge badge-ghost">{{ rows|length }}</span></h2>
+      {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url csv_tip="Download the repeat items as CSV" %}
+    </div>
+    <p class="text-sm text-base-content/70">
+      Items that were Excess or Shortage in 2 or more audits in a row of the same Branch. An audit where the item was OK or not counted breaks the run.
+      Click ▸ to see each audit in the run, or the item to open its latest query.
+    </p>
+    {% if rows %}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th class="w-8"><span class="sr-only">Details</span></th><th>Branch</th><th>Item No</th><th>Description</th><th class="text-right" title="Longest run of audits in a row with Excess / Shortage">Audits in a row</th><th class="text-right" title="Variance value added up over that run">Total variance value</th></tr></thead>
+          {% for row in rows %}
+            <tbody x-data="{ open: false }">
+              <tr>
+                <td>{% include "audits/partials/dashboard_expander.html" with detail_url=row.detail_url detail_id=row.detail_id expander_tip="Show each audit of this item in the Branch" %}</td>
+                <td class="font-bold">{{ row.branch }}</td>
+                <td>{% if row.query_id %}<a class="link link-primary font-bold" href="{% url 'audits:query_detail' row.query_id %}" title="Open the latest query: item history table">{{ row.item_code }}</a>{% else %}{{ row.item_code }}{% endif %}</td>
+                <td>{{ row.description }}</td>
+                <td class="text-right"><span class="badge {% if row.streak >= 3 %}badge-error{% else %}badge-warning{% endif %}">{{ row.streak }}</span></td>
+                <td class="text-right font-bold {% if row.total_value < 0 %}text-error{% else %}text-success{% endif %}">{{ row.total_value|floatformat:2|intcomma }}</td>
+              </tr>
+              <tr x-show="open" x-cloak><td colspan="6" class="bg-base-200 p-3"><div id="{{ row.detail_id }}"><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-success"><span>No item had Excess / Shortage in 2 audits in a row.</span></div>
+    {% endif %}
+  </div>
+</div>

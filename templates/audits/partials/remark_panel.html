@@ -34,6 +34,11 @@
       <div><button type="submit" class="btn btn-sm btn-primary" title="Save this remark with your name and the time">Add remark</button></div>
     </form>
   {% endif %}
+  {% if line %}
+    <div class="divider my-0"></div>
+    <h3 class="font-bold">Photos &amp; files · {{ line.item_code }}</h3>
+    <div hx-get="{% url 'audits:media_panel' 'line' line.pk %}" hx-trigger="load" hx-target="this" hx-swap="outerHTML"><span class="loading loading-dots loading-sm"></span></div>
+  {% endif %}
   {% if line %}<span id="remark-count-{{ line.pk }}" hx-swap-oob="true">{{ remarks|length }}</span>{% endif %}
 </div>
 {% endwith %}

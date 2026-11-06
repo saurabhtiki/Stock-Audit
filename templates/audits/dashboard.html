@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-bold">Dashboard <span class="text-base font-normal text-base-content/60">{{ current_company.name }}</span></h1>
+</div>
+<p class="mb-4 text-sm text-base-content/70">
+  Shows only Branches where you have the “View reports” right. The filters apply to every tab, and each table can be downloaded as CSV.
+</p>
+<div id="dashboard">{% include "audits/partials/dashboard_body.html" %}</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

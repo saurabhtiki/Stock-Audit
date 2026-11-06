@@ -1,0 +1,36 @@
+{% load humanize %}
+<div id="status-table" hx-target="#status-table" hx-swap="outerHTML">
+  {% if table.has_any_rows %}
+    {% include "partials/datatable/toolbar.html" %}
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm table-zebra data-table">
+        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <tbody>
+          {% for audit in table.page %}
+            <tr>
+              <td class="dt-sticky font-bold">{{ audit.branch_code }}</td>
+              <td><a class="link link-primary font-bold" href="{% url 'audits:audit_detail' audit.pk %}" title="Open this audit">{{ audit.title }}</a></td>
+              <td>{{ audit.audit_date|date:"d M Y" }}</td>
+              <td>{% if audit.audit_type == "surprise" %}<span class="badge badge-sm badge-warning">Surprise</span>{% else %}Scheduled{% endif %}</td>
+              <td><span class="badge badge-sm badge-ghost">{{ audit.get_stage_display }}</span></td>
+              <td class="text-right">{{ audit.line_count|intcomma }}</td>
+              <td class="text-right">
+                {% if audit.line_count %}
+                  <div class="flex items-center justify-end gap-2" title="{{ audit.counted_count|intcomma }} of {{ audit.line_count|intcomma }} lines counted">
+                    <progress class="progress progress-primary hidden w-16 sm:block" value="{{ audit.pct_counted }}" max="100"></progress>{{ audit.pct_counted }}%
+                  </div>
+                {% else %}–{% endif %}
+              </td>
+              <td class="text-right">{% if audit.open_queries %}<span class="badge badge-sm badge-error" title="Queries raised in this audit that are not Closed">{{ audit.open_queries }}</span>{% else %}0{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="py-6 text-center text-base-content/70">No audits match your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="true" class="link link-primary">Clear table filters</a></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/datatable/pager.html" %}
+  {% else %}
+    <div role="alert" class="alert alert-soft alert-info"><span>No audits in these Branches and months. Try a wider month range.</span></div>
+  {% endif %}
+</div>

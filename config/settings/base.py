@@ -55,6 +55,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.company_context",
                 "core.context_processors.app_context",
+                "core.context_processors.backup_reminder",
             ],
         },
     },
@@ -125,3 +126,13 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
     "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
 }
+
+# Attachments (Phase 5). Photos are shrunk to a JPEG; videos and files are kept as uploaded.
+PHOTO_MAX_BYTES = 10 * 1024 * 1024
+PHOTO_MAX_PIXELS = 1600
+VIDEO_MAX_BYTES = 100 * 1024 * 1024
+FILE_MAX_BYTES = 5 * 1024 * 1024
+PHOTO_MAX_MEGAPIXELS = 50  # a 48 MP phone photo fits; bigger is refused before decoding
+ATTACHMENT_MAX_FILES = 20  # per upload (Django's own limit of 100 stays as a hard stop)
+PDF_MAX_PHOTOS = 100
+PDF_COMPRESS = 1  # 0 in tests, so the PDF text can be checked
