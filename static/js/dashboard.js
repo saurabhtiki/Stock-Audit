@@ -83,6 +83,17 @@
     });
   }
 
+  // htmx skips 4xx replies by default. Inside a ▸ drilldown box the reply is a short,
+  // friendly message (e.g. "This Branch is not in your filters"), so show it there
+  // instead of leaving "Loading…" on screen.
+  document.body.addEventListener("htmx:beforeSwap", function (event) {
+    var status = event.detail.xhr.status;
+    if (status >= 400 && status < 500 && event.detail.target.hasAttribute("data-drilldown")) {
+      event.detail.shouldSwap = true;
+      event.detail.isError = false;
+    }
+  });
+
   drawCharts(document);
   document.body.addEventListener("htmx:afterSettle", function (event) {
     drawCharts(event.target);

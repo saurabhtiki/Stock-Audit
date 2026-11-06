@@ -43,7 +43,7 @@
                 <td class="text-right font-bold {% if row.net < 0 %}text-error{% endif %}">{{ row.net|floatformat:2|intcomma }}</td>
                 <td class="text-right">{{ row.queries }}</td>
               </tr>
-              {% if not item %}<tr x-show="open" x-cloak><td colspan="8" class="bg-base-200 p-3"><div id="{{ row.detail_id }}"><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>{% endif %}
+              {% if not item %}<tr x-show="open" x-cloak><td colspan="8" class="bg-base-200 p-3"><div id="{{ row.detail_id }}" data-drilldown><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>{% endif %}
             </tbody>
           {% endfor %}
         </table>

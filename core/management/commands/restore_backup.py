@@ -111,7 +111,10 @@ class Command(BaseCommand):
         for name in names:
             if name.endswith("/"):
                 continue
-            target = media_root / name[len(backup.MEDIA_PREFIX) :]
+            try:
+                target = backup.media_target(media_root, name)
+            except backup.BackupError as error:
+                raise CommandError(str(error)) from error
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(name) as source, open(target, "wb") as destination:
                 shutil.copyfileobj(source, destination)

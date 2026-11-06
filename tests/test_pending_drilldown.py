@@ -58,7 +58,8 @@ def test_pending_table_filters_sort_and_partial(raised, replier):  # noqa: F811
     client = client_for(replier)
     response = htmx(client, "pending-table", tab="replies", item_code="A100", sort="-created_at")
     body = response.content.decode()
-    assert body.lstrip().startswith("<div") or 'id="pending-table"' in body
+    assert 'id="pending-table"' in body
+    assert 'id="pending-items"' not in body and 'role="tablist"' not in body  # only the table
     assert "A100" in body and "<html" not in body
     assert (
         "A100" not in htmx(client, "pending-table", tab="replies", item_code="ZZZ").content.decode()
@@ -164,7 +165,31 @@ def test_drilldown_bad_values(admin_client, north):  # noqa: F811
 
 
 def test_drilldown_needs_view_reports(raised, replier):  # noqa: F811
-    assert detail(client_for(replier), "trend", audit=raised.audit.pk).status_code == 403
+    response = detail(client_for(replier), "trend", audit=raised.audit.pk)
+    body = response.content.decode()
+    # A short message for the expander (shown by dashboard.js), not a whole page.
+    assert response.status_code == 403 and "View reports" in body and "<html" not in body
+
+
+def test_drilldown_boxes_marked_for_error_messages(admin_client, two_audits):
+    body = admin_client.get(reverse("audits:dashboard_tab", args=["variance"])).content.decode()
+    assert "data-drilldown" in body
+
+
+def test_trend_item_mode_has_no_expander(admin_client, two_audits):
+    url = reverse("audits:dashboard_tab", args=["trend"])
+    assert "dashboard/detail/trend" in admin_client.get(url).content.decode()
+    assert "dashboard/detail/trend" not in admin_client.get(url, {"item": "X1"}).content.decode()
+
+
+def test_ageing_link_carries_audit_type(admin_client, admin_user, north):  # noqa: F811
+    make_audit(north, "Plan", TODAY, admin_user, lines=[("P1", 10, 2, 1)])
+    make_audit(north, "Spot", TODAY, admin_user, lines=[("S1", 10, 2, 1)], kind="surprise")
+    filters = filters_for([north], today=TODAY, type="surprise")
+    link = dashboard_views._ageing_link(filters, north.code, today=TODAY)
+    assert "audit_type=surprise" in link
+    listing = admin_client.get(link).content.decode()
+    assert "S1" in listing and "P1" not in listing
 
 
 def test_ageing_links_open_matching_queries(admin_client, admin_user, north):  # noqa: F811

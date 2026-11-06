@@ -529,3 +529,10 @@ email alerts.
   open statuses, audit dates and "Raised on" range filled in (new "Raised on" column on the Queries list).
   Code: `dashboard_views.dashboard_detail`, `partials/dashboard_detail.html`, `dashboard_expander.html`.
 - Tests: `tests/test_pending_drilldown.py`.
+- Code review fixes (328 tests pass):
+  - Drilldown messages (400/403) now show inside the ▸ box, via `dashboard.js`.
+  - Restore refuses drive-letter or backslash names and anything that would land outside the media folder.
+  - The backup temp folder is always deleted, even on errors or a cancelled download.
+  - A backup is recorded only after the whole zip was sent.
+  - Ageing links carry the audit type, and the Queries list gained a Type column.
+  - Logged 404s, a shared rights helper, and fewer session writes.

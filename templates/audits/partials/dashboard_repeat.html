@@ -23,7 +23,7 @@
                 <td class="text-right"><span class="badge {% if row.streak >= 3 %}badge-error{% else %}badge-warning{% endif %}">{{ row.streak }}</span></td>
                 <td class="text-right font-bold {% if row.total_value < 0 %}text-error{% else %}text-success{% endif %}">{{ row.total_value|floatformat:2|intcomma }}</td>
               </tr>
-              <tr x-show="open" x-cloak><td colspan="6" class="bg-base-200 p-3"><div id="{{ row.detail_id }}"><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>
+              <tr x-show="open" x-cloak><td colspan="6" class="bg-base-200 p-3"><div id="{{ row.detail_id }}" data-drilldown><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>
             </tbody>
           {% endfor %}
         </table>

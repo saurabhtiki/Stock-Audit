@@ -13,7 +13,7 @@
             <thead><tr><th>Branch</th>{% for label in age_labels %}<th class="text-right">{{ label }} days</th>{% endfor %}<th class="text-right">Total open</th></tr></thead>
             <tbody>
               {% for row in ageing %}
-                <tr><td class="font-bold">{{ row.branch }}</td>{% for cell in row.cells %}<td class="text-right {% if forloop.counter > 3 and cell.count %}font-bold text-error{% endif %}">{% if cell.count %}<a class="link" href="{{ cell.url }}" title="Open these {{ cell.count }} queries in the Queries list (Branch, age and audit dates filled in)">{{ cell.count }}</a>{% else %}0{% endif %}</td>{% endfor %}<td class="text-right font-bold">{% if row.total %}<a class="link" href="{{ row.total_url }}" title="Open all {{ row.total }} open queries of {{ row.branch }} in the Queries list">{{ row.total }}</a>{% else %}0{% endif %}</td></tr>
+                <tr><td class="font-bold">{{ row.branch }}</td>{% for cell in row.cells %}<td class="text-right {% if forloop.counter > 3 and cell.count %}font-bold text-error{% endif %}">{% if cell.count %}<a class="link" href="{{ cell.url }}" title="Open these {{ cell.count }} queries in the Queries list (Branch, age, audit dates and type filled in)">{{ cell.count }}</a>{% else %}0{% endif %}</td>{% endfor %}<td class="text-right font-bold">{% if row.total %}<a class="link" href="{{ row.total_url }}" title="Open all {{ row.total }} open queries of {{ row.branch }} in the Queries list">{{ row.total }}</a>{% else %}0{% endif %}</td></tr>
               {% endfor %}
             </tbody>
           </table>

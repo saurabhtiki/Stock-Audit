@@ -1,6 +1,7 @@
 """Admin “Backup” screen: download a zip of the database (and media), see the last backup."""
 
 import logging
+import shutil
 import sqlite3
 
 from django.contrib import messages
@@ -53,16 +54,26 @@ def backup_download(request):
         )
         return redirect("core:backup")
 
-    size = zip_path.stat().st_size
-    record = BackupLog.objects.create(
-        created_by=request.user, kind=kind, size=size, file_name=zip_path.name
-    )
-    log_activity(
-        request.user, "backup downloaded", record, {"kind": record.get_kind_display(), "size": size}
-    )
-    response = StreamingHttpResponse(
-        backup.stream_and_clean(zip_path, folder), content_type="application/zip"
-    )
+    try:
+        size = zip_path.stat().st_size
+        user = request.user
+
+        def record_backup():
+            """Runs only when the whole zip was sent: the 7-day reminder trusts this."""
+            record = BackupLog.objects.create(
+                created_by=user, kind=kind, size=size, file_name=zip_path.name
+            )
+            log_activity(
+                user, "backup downloaded", record, {"kind": record.get_kind_display(), "size": size}
+            )
+
+        response = StreamingHttpResponse(
+            backup.ZipDownload(zip_path, folder, on_finished=record_backup),
+            content_type="application/zip",
+        )
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)  # never leave a database copy in temp
+        raise
     response["Content-Length"] = str(size)
     response["Content-Disposition"] = f'attachment; filename="{zip_path.name}"'
     return response

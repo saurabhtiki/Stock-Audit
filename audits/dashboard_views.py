@@ -79,6 +79,8 @@ def _ageing_link(filters, branch_code: str, low=None, high=None, today=None) -> 
         ("audit_date_min", filters.month_from.isoformat()),
         ("audit_date_max", filters.date_to.isoformat()),
     ]
+    if filters.audit_type:
+        params.append(("audit_type", filters.audit_type))
     if high is not None:
         params.append(("created_at_min", (today - timedelta(days=high)).isoformat()))
     if low is not None:
@@ -178,7 +180,8 @@ def _trend_context(request, filters):
             latest = filters.final_audits().order_by("-audit_date", "-id").first()
             branch = latest.branch if latest else filters.branches[0]
     rows = dashboards.trend_rows(filters, branch=branch, item=item)
-    _add_detail_links(rows, filters, "trend", lambda row: [("audit", row["audit_id"])])
+    if item is None:  # one item's trend has no ▸ (its rows are that one item already)
+        _add_detail_links(rows, filters, "trend", lambda row: [("audit", row["audit_id"])])
     chart = {
         "type": "line",
         "labels": [f"{row['label']} ({row['audit_date']:%d %b %y})" for row in rows],
@@ -297,15 +300,27 @@ def _csv(tab: str, context: dict):
     )
 
 
+NO_REPORTS_RIGHT = (
+    "You need the “View reports” right in a Branch of this company to see dashboards."
+)
+
+
+def _not_found(request, message: str):
+    logger.info("%s asked for %s: %s", request.user.username, request.path, message)
+    raise Http404(message)
+
+
+def _report_branches(request):
+    """Branches where the user has “View reports” (empty list = no dashboard at all)."""
+    return list(branches_with_right(request.user, request.company, "view_reports"))
+
+
 def dashboard(request, tab: str = "status"):
     if tab not in TAB_NAMES:
-        raise Http404("No such dashboard tab.")
-    allowed = branches_with_right(request.user, request.company, "view_reports")
+        _not_found(request, "No such dashboard tab.")
+    allowed = _report_branches(request)
     if not allowed:
-        return forbidden(
-            request,
-            "You need the “View reports” right in a Branch of this company to see dashboards.",
-        )
+        return forbidden(request, NO_REPORTS_RIGHT)
     filters = dashboards.read_filters(request.GET, allowed)
     context = CONTEXT_BUILDERS[tab](request, filters)
 
@@ -359,6 +374,7 @@ DETAIL_KINDS = ("variance", "repeat", "trend")
 
 
 def _detail_problem(request, message: str, status: int = 400):
+    """A short message shown inside the expander (dashboard.js lets htmx swap 4xx in there)."""
     logger.info("Dashboard drilldown refused for %s: %s", request.user.username, message)
     return render(
         request, "audits/partials/dashboard_detail.html", {"problem": message}, status=status
@@ -373,13 +389,10 @@ def _int_param(params, name: str) -> int | None:
 def dashboard_detail(request, kind: str):
     """The rows behind one summary row, opened with the ▸ button (htmx, loaded on first click)."""
     if kind not in DETAIL_KINDS:
-        raise Http404("No such drilldown.")
-    allowed = branches_with_right(request.user, request.company, "view_reports")
+        _not_found(request, "No such drilldown.")
+    allowed = _report_branches(request)
     if not allowed:
-        return forbidden(
-            request,
-            "You need the “View reports” right in a Branch of this company to see dashboards.",
-        )
+        return _detail_problem(request, NO_REPORTS_RIGHT, status=403)
     filters = dashboards.read_filters(request.GET, allowed)
     context = {"kind": kind, "limit": dashboards.DETAIL_LIMIT}
 

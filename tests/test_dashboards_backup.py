@@ -572,6 +572,66 @@ def test_restore_refuses_unsafe_names(tmp_path, db):
         call_command("restore_backup", str(evil), no_input=True)
 
 
+@pytest.mark.parametrize(
+    "name", ["media/C:/outside.txt", "media/C:outside.txt", r"media/..\outside.txt", "/etc/x"]
+)
+def test_unsafe_media_names_refused(name):
+    assert not backup.is_safe_media_name(name)
+
+
+def test_restore_refuses_drive_letter(tmp_path, db):
+    evil = tmp_path / "evil.zip"
+    with zipfile.ZipFile(evil, "w") as archive:
+        archive.writestr(backup.INFO_NAME, "x")
+        archive.writestr(backup.DB_NAME, "x")
+        archive.writestr("media/C:/outside.txt", "x")
+    with pytest.raises(CommandError, match="Unexpected file"):
+        call_command("restore_backup", str(evil), no_input=True)
+
+
+def test_media_target_stays_inside(tmp_path):
+    root = tmp_path / "media"
+    assert backup.media_target(root, "media/a/b.jpg") == (root / "a" / "b.jpg").resolve()
+    with pytest.raises(backup.BackupError):
+        backup.media_target(root, "media/../x.txt")
+
+
+def test_backup_not_logged_until_whole_file_sent(admin_client, monkeypatch, media_root, tmp_path):
+    import sqlite3
+
+    def fake_copy(target):
+        sqlite3.connect(target).close()
+
+    work = tmp_path / "tmp"
+    work.mkdir()
+    monkeypatch.setattr("tempfile.tempdir", str(work))
+    monkeypatch.setattr(backup, "copy_database", fake_copy)
+    response = admin_client.post(reverse("core:backup_download"), {"kind": "database"})
+    next(iter(response.streaming_content))  # download starts, then the user cancels
+    response.close()
+    assert not BackupLog.objects.exists()  # the reminder stays on
+    assert list(work.iterdir()) == []  # and no database copy is left in temp
+
+
+def test_backup_temp_removed_when_logging_setup_fails(admin_client, monkeypatch, tmp_path):
+    import sqlite3
+
+    work = tmp_path / "tmp"
+    work.mkdir()
+    monkeypatch.setattr("tempfile.tempdir", str(work))
+    monkeypatch.setattr(backup, "copy_database", lambda target: sqlite3.connect(target).close())
+
+    def broken(*args, **kwargs):
+        raise OSError("disk gone")
+
+    monkeypatch.setattr("core.backup_views.StreamingHttpResponse", broken)
+    admin_client.raise_request_exception = False
+    assert (
+        admin_client.post(reverse("core:backup_download"), {"kind": "database"}).status_code == 500
+    )
+    assert list(work.iterdir()) == []
+
+
 def test_restore_damaged_database(tmp_path, db):
     broken = tmp_path / "broken.zip"
     with zipfile.ZipFile(broken, "w") as archive:

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 from accounts.access import visible_branches
 from audits import queries as query_logic
 from audits.forms import ActionForm
-from audits.models import Action, Query
+from audits.models import Action, Audit, Query
 from audits.permissions import (
     QUERY_STAGES,
     branches_with_right,
@@ -47,6 +47,7 @@ QUERY_COLUMNS = [
     Column("branch_code", "Branch", type=CHOICE),
     Column("audit_title", "Audit"),
     Column("audit_date", "Audit date", type=DATE),
+    Column("audit_type", "Type", type=CHOICE, choices=dict(Audit.Type.choices)),
     Column("item_code", "Item No"),
     Column("description", "Description"),
     Column("variance_qty", "Variance", type=NUMBER),
@@ -71,6 +72,7 @@ def _query_rows(branches):
         branch_code=F("audit__branch__code"),
         audit_title=F("audit__title"),
         audit_date=F("audit__audit_date"),
+        audit_type=F("audit__audit_type"),
         item_code=F("line__item_code"),
         description=F("line__description"),
         variance_qty=F("line__variance_qty"),

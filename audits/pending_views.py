@@ -170,7 +170,8 @@ def pending_section(request):
     pending = pending_for(request.user, request.company)
     counts = {tab.name: pending[tab.key].count() for tab in TABS}
     tab = _pick_tab(request, counts)
-    request.session[SESSION_TAB_KEY] = tab.name
+    if request.session.get(SESSION_TAB_KEY) != tab.name:  # don't save the session every visit
+        request.session[SESSION_TAB_KEY] = tab.name
     table = DataTable(
         request.GET,
         _rows(tab, pending[tab.key]),

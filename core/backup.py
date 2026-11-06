@@ -13,10 +13,10 @@ import tempfile
 import tomllib
 import zipfile
 from datetime import timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from django.conf import settings
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.utils import timezone
 
 from core.models import BackupLog
@@ -117,14 +117,39 @@ def build_zip(kind: str, user) -> tuple[Path, Path]:
     return zip_path, folder
 
 
-def stream_and_clean(zip_path: Path, folder: Path):
-    """Send the zip in chunks, then delete the temp folder (also if the download stops)."""
-    try:
-        with open(zip_path, "rb") as file:
+class ZipDownload:
+    """The zip sent in chunks. The temp folder is always deleted when the response closes,
+    even if streaming never started. `on_finished` runs only after the last chunk went out,
+    so a download that breaks halfway is not counted as a backup."""
+
+    def __init__(self, zip_path: Path, folder: Path, on_finished=None):
+        self.zip_path = zip_path
+        self.folder = folder
+        self.on_finished = on_finished
+        self.finished = False
+        self._chunks = self._read()
+
+    def _read(self):
+        with open(self.zip_path, "rb") as file:
             while chunk := file.read(CHUNK):
                 yield chunk
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
+        self.finished = True
+        if self.on_finished is not None:
+            try:
+                self.on_finished()
+            except DatabaseError:
+                # The user already has the whole file; only the "last backup" note is missing.
+                logger.exception("Backup %s was sent but could not be recorded", self.zip_path.name)
+
+    def __iter__(self):
+        return self._chunks
+
+    def close(self) -> None:
+        """Django calls this when the response is done (or the client went away)."""
+        self._chunks.close()  # closes the zip file first, so Windows lets us delete it
+        shutil.rmtree(self.folder, ignore_errors=True)
+        if not self.finished:
+            logger.warning("Backup download %s stopped before the end", self.zip_path.name)
 
 
 def last_backup() -> BackupLog | None:
@@ -163,11 +188,28 @@ def check_zip(path: Path) -> zipfile.ZipFile:
             f"{path.name} is not a Stock Audit backup (missing {INFO_NAME} or {DB_NAME})."
         )
     for name in names - {INFO_NAME, DB_NAME}:
-        parts = Path(name).parts
-        if not name.startswith(MEDIA_PREFIX) or ".." in parts or Path(name).is_absolute():
+        if not is_safe_media_name(name):
             archive.close()
             raise BackupError(f"Unexpected file in the backup: {name}. Restore stopped.")
     return archive
+
+
+def is_safe_media_name(name: str) -> bool:
+    """A media entry must stay inside the media folder on any OS: no '..', no absolute path,
+    no drive letter (``media/C:/x`` would land on drive C on Windows), no backslashes."""
+    if not name.startswith(MEDIA_PREFIX) or "\\" in name or ":" in name:
+        return False
+    parts = PurePosixPath(name).parts
+    return ".." not in parts and not PurePosixPath(name).is_absolute()
+
+
+def media_target(media_root: Path, name: str) -> Path:
+    """Where a media entry is written. Refuses any path that would end up outside media_root."""
+    root = media_root.resolve()
+    target = (root / name[len(MEDIA_PREFIX) :]).resolve()
+    if not is_safe_media_name(name) or not target.is_relative_to(root):
+        raise BackupError(f"Unexpected file in the backup: {name}. Restore stopped.")
+    return target
 
 
 def check_database(db_path: Path) -> None:
