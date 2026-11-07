@@ -121,6 +121,51 @@ Then **Web → Reload**. Download a backup (**Admin → Backup**) **before** eve
 
 `.env.production`, `data/` and `media/` are not in git, so `git pull` never touches them.
 
+## 6. Restoring a backup
+
+Use this to undo a bad day, or to move your data from your PC to PythonAnywhere the first
+time (make the backup on the PC with **Admin → Backup**, then follow the same steps).
+
+**This replaces the live data** with what's in the zip. Example: restore last Monday's zip →
+everything entered since Monday is gone (the old copy is kept, see step 6 below).
+
+1. **Upload the zip:** **Files** tab → open `/home/tikitar/` → **Upload a file** → pick the
+   backup zip (e.g. `stock-audit-production-full-20261106-1610.zip`).
+   The upload limit is 100 MB. If your zip is bigger, put it on Google Drive or Dropbox and
+   download it in the Bash console with `wget "<link>"`. Free accounts can only download from
+   sites on the whitelist, so this needs a paid account.
+2. **Stop the site:** **Web** tab → **Disable** (so nobody saves data while you restore).
+3. **Restore** in a Bash console:
+   ```bash
+   cd ~/Stock-Audit
+   source .venv/bin/activate
+   export DJANGO_ENV=production
+   python manage.py restore_backup ~/stock-audit-production-full-20261106-1610.zip --force
+   ```
+   It shows what's in the zip, then asks you to type `yes`.
+   `--force` is needed because this is the live site; the app adds it as a safety check.
+4. **Bring the database up to date** (needed if the backup is older than the code):
+   ```bash
+   python manage.py migrate
+   ```
+5. **Start the site:** **Web** tab → **Enable**, then **Reload**. Log in and check that users,
+   audits and photos are there.
+6. **Free up disk space** once you're happy (the free plan has only 512 MB). The restore keeps
+   the old data next to the new data, named with `before-restore`:
+   ```bash
+   cd ~/Stock-Audit
+   ls data media
+   rm data/production.before-restore-*.db
+   rm -r media/production.before-restore-*
+   rm ~/stock-audit-production-full-*.zip
+   ```
+   Changed your mind before deleting? Those `before-restore` copies are your way back.
+   Ask for help putting them back.
+
+**Restore stopped?** It says why in plain words, for example "Unexpected file in the backup"
+(not a Stock Audit zip) or "Restore stopped. Nothing was changed." (you didn't type `yes`).
+If it fails partway through, the old copies are still kept.
+
 ---
 
 ## Something wrong?
@@ -137,4 +182,5 @@ Look at the **Error log** link on the Web tab first (newest lines at the bottom)
 | "Too many redirects" | Set `SECURE_SSL_REDIRECT=false` and use **Force HTTPS** on the Web tab instead. |
 | `disk I/O error` or `database is locked` in the log | SQLite's WAL mode may not like PythonAnywhere's shared disk. Ask for a small settings switch to turn WAL off. |
 | `ModuleNotFoundError` | The Web tab's virtualenv path is wrong, or `uv sync` was not run. |
-| "Disk quota exceeded" | Free plan 512 MB is full: delete old attachments/backups or upgrade. |
+| "Disk quota exceeded" | Free plan 512 MB is full: delete old attachments/backups or upgrade. A restore briefly needs room for the zip + old data + new data. |
+| "The database could not be replaced" during restore | The site is still running: **Web → Disable**, then run the restore again. |
