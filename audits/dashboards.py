@@ -380,9 +380,6 @@ def trend_rows(filters: DashboardFilters, branch=None, item=None) -> list[dict]:
 
 # ---------- Drilldown: the rows behind one summary row ----------
 
-DETAIL_LIMIT = 50
-
-
 def _with_query(lines):
     """Lines with their query (if any) and its status, biggest variance value first."""
     return (

@@ -6,7 +6,7 @@
   <th class="{% if forloop.first %}dt-sticky{% if lead_column %} dt-after-lead{% endif %}{% endif %}{% if column.align_right %} text-right{% endif %}" aria-sort="{{ cell.sort_state }}">
     <div class="inline-flex items-center gap-1" x-data="dtPopup" @click.outside="close()" @keydown.escape.window="close()" @resize.window="open && place()" @scroll.window.capture="open && place()">
       {% if column.sortable %}
-        <a href="{{ cell.sort_url }}" hx-get="{{ cell.sort_url }}" hx-push-url="true" class="sort-button" title="{{ cell.sort_tip }}">{{ column.label }}</a>
+        <a href="{{ cell.sort_url }}" hx-get="{{ cell.sort_url }}" hx-push-url="{{ table.push_url }}" class="sort-button" title="{{ cell.sort_tip }}">{{ column.label }}</a>
       {% else %}{{ column.label }}{% endif %}
       {% if column.filterable %}
         <button type="button" x-ref="button" @click="toggle()" :aria-expanded="open" class="dt-funnel{% if cell.is_filtered %} is-on{% endif %}"
@@ -14,7 +14,7 @@
           <svg viewBox="0 0 24 24" class="h-4 w-4" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="{% if cell.is_filtered %}currentColor{% else %}none{% endif %}" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg>
         </button>
         <div x-ref="panel" x-show="open" x-cloak :style="style" class="dt-panel card card-sm bg-base-100 text-base-content shadow-xl" role="dialog" aria-label="Filter {{ column.label }}">
-          <form class="card-body gap-2" hx-get="{{ table.base_url }}" hx-push-url="true">
+          <form class="card-body gap-2" hx-get="{{ table.base_url }}" hx-push-url="{{ table.push_url }}">
             {% for name, value in cell.hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
             <p class="font-bold">{{ column.label }}</p>
             {% if column.type == "text" %}
@@ -48,7 +48,7 @@
               <p class="text-xs text-base-content/60">Fill one box only for “from” or “up to”.</p>
             {% endif %}
             <div class="mt-1 flex justify-end gap-2">
-              {% if cell.is_filtered %}<a href="{{ cell.clear_url }}" hx-get="{{ cell.clear_url }}" hx-push-url="true" class="btn btn-sm btn-ghost" title="Remove the {{ column.label }} filter">Remove</a>{% endif %}
+              {% if cell.is_filtered %}<a href="{{ cell.clear_url }}" hx-get="{{ cell.clear_url }}" hx-push-url="{{ table.push_url }}" class="btn btn-sm btn-ghost" title="Remove the {{ column.label }} filter">Remove</a>{% endif %}
               <button type="submit" class="btn btn-sm btn-primary" title="Show only the rows that pass this filter">Apply</button>
             </div>
           </form>

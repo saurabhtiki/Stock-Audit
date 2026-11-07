@@ -128,9 +128,13 @@ class DataTable:
         noun="rows",
         keep=(),
         default_per_page=PAGE_SIZES[0],
+        push_url=True,
     ):
         self.params = params
         self.default_per_page = default_per_page
+        # False for a table inside another page (e.g. a dashboard expander): its clicks
+        # must not change the browser address, or a refresh would show only the table.
+        self.push_url = "true" if push_url else "false"
         # Outside settings carried in every link, e.g. the dashboard's Branch / month filters.
         self.keep = tuple(keep)
         self.base_queryset = queryset

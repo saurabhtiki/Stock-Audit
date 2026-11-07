@@ -3,6 +3,10 @@
 
 import os
 import sys
+from pathlib import Path
+
+# Keep the project folder importable even when PYTHONSAFEPATH is set.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def main():

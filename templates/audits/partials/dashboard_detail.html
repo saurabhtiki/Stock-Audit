@@ -26,30 +26,8 @@
     </table>
   </div>
 {% else %}
-  {% if lines %}
-    <p class="mb-1 text-xs text-base-content/70">
-      {% if total > limit %}Biggest {{ limit }} of {{ total|intcomma }} items with a variance, by value.{% else %}{{ total|intcomma }} item{{ total|pluralize }} with a variance, biggest value first.{% endif %}
-      Small ones inside the tolerance are included.
-    </p>
-    <div class="overflow-x-auto">
-      <table class="table table-xs">
-        <thead><tr>{% if kind == "variance" %}<th>Audit</th>{% endif %}<th>Item No</th><th>Description</th><th>Status</th><th class="text-right">Variance qty</th><th class="text-right">Variance value</th><th>Query</th></tr></thead>
-        <tbody>
-          {% for line in lines %}
-            <tr>
-              {% if kind == "variance" %}<td><a class="link link-primary" href="{% url 'audits:audit_detail' line.audit_id %}" title="Open this audit">{{ line.audit.title }}</a></td>{% endif %}
-              <td class="font-bold">{{ line.item_code }}</td>
-              <td class="max-w-xs truncate" title="{{ line.description }}">{{ line.description }}</td>
-              <td>{{ line.get_count_status_display }}</td>
-              <td class="text-right {% if line.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ line.variance_qty|floatformat:"-3" }}</td>
-              <td class="text-right font-bold {% if line.variance_value < 0 %}text-error{% else %}text-success{% endif %}">{{ line.variance_value|floatformat:2|intcomma }}</td>
-              <td>{% if line.query %}<a class="link link-primary" href="{% url 'audits:query_detail' line.query.pk %}" title="Open this query">{% include "audits/partials/query_status_badge.html" with status=line.query.status %}</a>{% else %}<span class="text-base-content/50" title="Inside the tolerance, so no query was raised">–</span>{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <p class="text-sm text-base-content/70">Every counted item matched the ERP: no variance.</p>
+  {% if table.has_any_rows %}
+    <p class="mb-1 text-xs text-base-content/70">Every item with a variance, biggest value first. Small ones inside the tolerance are included.</p>
   {% endif %}
+  {% include "audits/partials/dashboard_detail_table.html" %}
 {% endif %}

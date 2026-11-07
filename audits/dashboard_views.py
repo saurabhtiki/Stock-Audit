@@ -1,6 +1,7 @@
 """Dashboard page: one filter bar and five tabs (Phase 6). Numbers come from audits.dashboards."""
 
 import logging
+import re
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -11,7 +12,7 @@ from django.utils import timezone
 from django.utils.cache import patch_vary_headers
 
 from audits import dashboards
-from audits.models import Audit, Query
+from audits.models import Audit, AuditLine, Query
 from audits.permissions import branches_with_right, forbidden
 from audits.views import _is_htmx, _vary_on_htmx
 from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable, rows_csv_response
@@ -122,8 +123,9 @@ def _add_detail_links(rows, filters, kind: str, make_params) -> None:
     """Give each row the URL and element id its ▸ expander loads into."""
     base = reverse("audits:dashboard_detail", args=[kind])
     for number, row in enumerate(rows, start=1):
-        row["detail_url"] = f"{base}?{urlencode([*filters.as_params(), *make_params(row)])}"
         row["detail_id"] = f"{kind}-detail-{number}"
+        params = [*filters.as_params(), *make_params(row), ("box", row["detail_id"])]
+        row["detail_url"] = f"{base}?{urlencode(params)}"
 
 
 def _variance_context(request, filters):
@@ -394,7 +396,7 @@ def dashboard_detail(request, kind: str):
     if not allowed:
         return _detail_problem(request, NO_REPORTS_RIGHT, status=403)
     filters = dashboards.read_filters(request.GET, allowed)
-    context = {"kind": kind, "limit": dashboards.DETAIL_LIMIT}
+    context = {"kind": kind}
 
     if kind in ("variance", "repeat"):
         branch_id = _int_param(request.GET, "row_branch")
@@ -421,6 +423,53 @@ def dashboard_detail(request, kind: str):
         context["runs"] = dashboards.item_runs(filters, branch_id, item_id)
         return render(request, "audits/partials/dashboard_detail.html", context)
 
-    context["total"] = lines.count()
-    context["lines"] = lines[: dashboards.DETAIL_LIMIT]
-    return render(request, "audits/partials/dashboard_detail.html", context)
+    table = _detail_table(request, kind, lines)
+    if table.wants_csv:
+        logger.info("%s downloaded dashboard drilldown CSV %s", request.user.username, kind)
+        return table.csv_response(_csv_name(f"{kind}_items"))
+    context["table"] = table
+    template = (
+        "audits/partials/dashboard_detail_table.html"
+        if request.headers.get("HX-Target") == table.table_id
+        else "audits/partials/dashboard_detail.html"
+    )
+    response = render(request, template, context)
+    patch_vary_headers(response, ["HX-Target"])
+    return response
+
+
+BOX_ID = re.compile(r"[a-z]+-detail-\d+")
+
+
+def _detail_table(request, kind: str, lines) -> DataTable:
+    """The expander's rows as our usual table (filters, sort, pages, CSV). Its clicks reload
+    only this table and do not change the page address, since it lives inside the dashboard."""
+    box = request.GET.get("box", "")
+    columns = [
+        Column("item_code", "Item No"),
+        Column("description", "Description"),
+        Column("count_status", "Status", type=CHOICE, choices=dict(AuditLine.Status.choices)),
+        Column("variance_qty", "Variance qty", type=NUMBER),
+        Column("variance_value", "Variance value", type=NUMBER),
+        Column(
+            "query__status",
+            "Query",
+            type=CHOICE,
+            choices=dict(Query.Status.choices),
+            # No query (inside the tolerance): getattr gives None instead of an error.
+            csv_value=lambda line: getattr(line, "query", None) and line.query.get_status_display(),
+        ),
+    ]
+    if kind == "variance":
+        columns.insert(0, Column("audit__title", "Audit", csv_value=lambda line: line.audit.title))
+    return DataTable(
+        request.GET,
+        lines,
+        columns,
+        table_id=f"{box if BOX_ID.fullmatch(box) else kind + '-detail'}-table",
+        default_sort=("-size", "item_code"),
+        base_url=request.path,
+        noun="items",
+        keep=(*dashboards.FILTER_PARAMS, "row_branch", "month", "audit", "box"),
+        push_url=False,
+    )

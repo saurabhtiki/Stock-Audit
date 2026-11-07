@@ -125,6 +125,30 @@ def test_variance_rows_link_to_detail(admin_client, two_audits, north):  # noqa:
     assert reverse("audits:query_detail", args=[first.queries.get(line__item_code="X1").pk]) in body
 
 
+def test_detail_uses_table_with_filters_and_csv(admin_client, two_audits, north):  # noqa: F811
+    first, _second = two_audits
+    month = f"{first.audit_date:%Y-%m}"
+    box = "variance-detail-1"
+    params = {"row_branch": north.pk, "month": month, "box": box}
+    body = detail(admin_client, "variance", **params).content.decode()
+    assert f'id="{box}-table"' in body and "Filter Item No" in body
+    assert 'hx-push-url="true"' not in body  # the dashboard address must not change
+
+    # A column filter reloads only the table, keeping the row's Branch / month.
+    response = admin_client.get(
+        reverse("audits:dashboard_detail", args=["variance"]),
+        {**params, "count_status": "excess"},
+        headers={"HX-Request": "true", "HX-Target": f"{box}-table"},
+    )
+    body = response.content.decode()
+    assert "X2" in body and "X1" not in body and "biggest value first" not in body
+
+    csv_body = b"".join(
+        detail(admin_client, "variance", **params, export="csv").streaming_content
+    ).decode()
+    assert "Item No" in csv_body and "X1" in csv_body and "First" in csv_body
+
+
 def test_variance_tab_has_expander_urls(admin_client, two_audits):
     body = admin_client.get(reverse("audits:dashboard_tab", args=["variance"])).content.decode()
     assert reverse("audits:dashboard_detail", args=["variance"]) in body

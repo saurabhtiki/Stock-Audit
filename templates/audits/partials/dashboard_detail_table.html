@@ -1,0 +1,30 @@
+{% load humanize %}
+{# Items behind one variance / trend row, in our usual table (filters, sort, pages, CSV). Built by dashboard_views._detail_table. #}
+<div id="{{ table.table_id }}" hx-target="#{{ table.table_id }}" hx-swap="outerHTML">
+  {% if table.has_any_rows %}
+    {% include "partials/datatable/toolbar.html" %}
+    <div class="overflow-x-auto rounded-box bg-base-100">
+      <table class="table table-sm table-zebra data-table">
+        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <tbody>
+          {% for line in table.page %}
+            <tr>
+              {% if kind == "variance" %}<td class="dt-sticky"><a class="link link-primary" href="{% url 'audits:audit_detail' line.audit_id %}" title="Open this audit">{{ line.audit.title }}</a></td>{% endif %}
+              <td class="font-bold{% if kind != 'variance' %} dt-sticky{% endif %}">{{ line.item_code }}</td>
+              <td class="max-w-xs truncate" title="{{ line.description }}">{{ line.description }}</td>
+              <td>{{ line.get_count_status_display }}</td>
+              <td class="text-right {% if line.variance_qty < 0 %}text-error{% else %}text-success{% endif %}">{{ line.variance_qty|floatformat:"-3" }}</td>
+              <td class="text-right font-bold {% if line.variance_value < 0 %}text-error{% else %}text-success{% endif %}">{{ line.variance_value|floatformat:2|intcomma }}</td>
+              <td>{% if line.query %}<a class="link link-primary" href="{% url 'audits:query_detail' line.query.pk %}" title="Open this query">{% include "audits/partials/query_status_badge.html" with status=line.query.status %}</a>{% else %}<span class="text-base-content/50" title="Inside the tolerance, so no query was raised">–</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{{ table.columns|length }}" class="py-6 text-center text-base-content/70">Nothing matches your filters. <a href="{{ table.clear_all_url }}" hx-get="{{ table.clear_all_url }}" hx-push-url="false" class="link link-primary" title="Remove every filter">Clear all filters</a></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/datatable/pager.html" %}
+  {% else %}
+    <p class="text-sm text-base-content/70">Every counted item matched the ERP: no variance.</p>
+  {% endif %}
+</div>
