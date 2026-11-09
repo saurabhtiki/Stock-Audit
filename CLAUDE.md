@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 8 (pilot feedback: filter pop-up fix, logo, phone menu, one tab style, overdue + repeat items on table, compact audit page, PDF line remarks + links) done. Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
+Phase 8.1 (PDF query under its line, Query page app-tabs, no Branch list on Home) done. Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

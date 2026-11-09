@@ -31,7 +31,7 @@
 {% endif %}
 
 {# Tabs: plain radio inputs, no JS. After a change the page comes back on the same tab (?tab=…). #}
-<div class="tabs tabs-lift mb-6">
+<div class="tabs app-tabs mb-6">
   {# ---------- Reply and updates ---------- #}
   <label class="tab gap-2" title="The reply that explains the difference, and dated updates under it">
     <input type="radio" name="query_tabs" aria-label="Reply" {% if active_tab == "reply" %}checked{% endif %}>

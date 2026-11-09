@@ -62,7 +62,7 @@ def test_company_list_filters_and_csv(admin_client, company_a, company_b, branch
 def test_branch_list_company_filter_and_add_prefill(admin_client, company_a, company_b, branches):
     Branch.objects.create(company=company_b, name="Main", code="M1")
     body = page(admin_client, "core:branch_list", company_name="Beta Stores")
-    assert "M1" in body and "N1" not in body
+    assert ">M1<" in body and ">N1<" not in body  # cell text, not a chance match in a token
     assert f"?company={company_b.pk}" in body  # "Add Branch" pre-fills the picked company
     lines = csv_lines(admin_client, "core:branch_list", q="nor")
     assert lines[1:] == ["N1,North,Alpha Traders,Active"]

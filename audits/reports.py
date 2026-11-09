@@ -28,7 +28,16 @@ from reportlab.platypus import (
 )
 
 from audits import counting
-from audits.models import Action, Attachment, Audit, AuditLine, Query, QueryReply, Remark
+from audits.models import (
+    Action,
+    Attachment,
+    Audit,
+    AuditLine,
+    Query,
+    QueryReply,
+    QueryUpdate,
+    Remark,
+)
 from core.datatable import formula_safe
 from core.models import ActivityLog
 
@@ -401,9 +410,43 @@ def _remark_text(remarks) -> str:
     )
 
 
-def _lines_table(headings, lines, make_cells, widths, styles, remarks_by_line, right_cols=()):
-    """A table of audit lines; each line's remarks sit in a full-width grey row right under it.
-    `make_cells(line)` gives the cells as Paragraph markup (already escaped)."""
+def _query_text(query, actions, latest_update) -> str:
+    """A line's query as small text: status, reply (+ latest update), closing note and actions.
+    “Query: Open · Reply: 2 cartons sent to Branch B – Het Shah, 07 Nov 2026”."""
+    parts = [f"<b>Query: {_esc(query.get_status_display())}</b>"]
+    reply = _reply_of(query)
+    parts.append(
+        f"<i>Reply:</i> {_esc(reply.text)} – {_esc(_name(reply.created_by))}, {_when(reply.created_at)}"
+        if reply
+        else "<i>No reply yet</i>"
+    )
+    text = " · ".join(parts)
+    if latest_update:
+        text += (
+            f"<br/><i>Latest update:</i> {_esc(latest_update.text)} – "
+            f"{_esc(_name(latest_update.created_by))}, {_when(latest_update.created_at)}"
+        )
+    if query.is_closed:
+        note = f": {_esc(query.close_note)}" if query.close_note else ""
+        text += (
+            f"<br/><i>Closed</i> by {_esc(_name(query.closed_by))}, {_when(query.closed_at)}{note}"
+        )
+    for action in actions:
+        due = ""
+        if action.due_date:
+            due = f", due {action.due_date:%d %b %Y}"
+            if action.is_overdue:
+                due += ' <font color="#b91c1c"><b>(overdue)</b></font>'
+        text += (
+            f"<br/><i>Action:</i> {_esc(action.description)} – {_esc(_name(action.owner))}, "
+            f"{_esc(action.get_status_display())}{due}"
+        )
+    return f'<font color="{REMARK_GREY}">{text}</font>'
+
+
+def _lines_table(headings, lines, make_cells, widths, styles, notes_by_line, right_cols=()):
+    """A table of audit lines; each line's remarks and query sit in a full-width grey row right
+    under it. `make_cells(line)` and `notes_by_line` hold Paragraph markup (already escaped)."""
     small = styles["small"]
     data = [headings]
     style = TableStyle(GRID.getCommands())
@@ -411,9 +454,9 @@ def _lines_table(headings, lines, make_cells, widths, styles, remarks_by_line, r
         style.add("ALIGN", (col, 1), (col, -1), "RIGHT")
     for line in lines:
         data.append([Paragraph(cell, small) for cell in make_cells(line)])
-        line_remarks = remarks_by_line.get(line.pk)
-        if line_remarks:
-            data.append([Paragraph(_remark_text(line_remarks), small)] + [""] * (len(headings) - 1))
+        notes = notes_by_line.get(line.pk)
+        if notes:
+            data.append([Paragraph(notes, small)] + [""] * (len(headings) - 1))
             row = len(data) - 1
             style.add("SPAN", (0, row), (-1, row))
             style.add("BACKGROUND", (0, row), (-1, row), colors.HexColor("#f4f4f5"))
@@ -512,6 +555,17 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
         ],
         ["", "", "Net variance", _num(net)],
     ]
+    query_count = audit.queries.count()
+    if query_count:
+        closed_count = audit.queries.filter(status=Query.Status.CLOSED).count()
+        summary_rows.append(
+            [
+                "Queries",
+                f"{query_count:,}",
+                "Not closed / Closed",
+                f"{query_count - closed_count:,} / {closed_count:,}",
+            ]
+        )
     summary_table = Table(summary_rows, colWidths=[width * 0.25] * 4)
     summary_table.setStyle(
         TableStyle(
@@ -562,6 +616,33 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
     # Lines printed in a table above, so links can jump to them.
     printed_line_ids = {line.pk for line in variance_lines} | {line.pk for line in not_counted}
 
+    # Each line's query (status, reply, actions) prints under it, after its remarks.
+    queries = list(_queries(audit))
+    actions_by_query: dict = {}
+    for action in _actions(audit):
+        actions_by_query.setdefault(action.query_id, []).append(action)
+    latest_update_by_query = {}
+    for update in (
+        QueryUpdate.objects.filter(query__audit=audit)
+        .select_related("created_by")
+        .order_by("created_at", "id")
+    ):
+        latest_update_by_query[update.query_id] = update  # the last one wins
+    query_text_by_line = {
+        query.line_id: _query_text(
+            query, actions_by_query.get(query.pk, []), latest_update_by_query.get(query.pk)
+        )
+        for query in queries
+    }
+    notes_by_line: dict = {}
+    for line_id in set(remarks_by_line) | set(query_text_by_line):
+        notes = []
+        if line_id in remarks_by_line:
+            notes.append(_remark_text(remarks_by_line[line_id]))
+        if line_id in query_text_by_line:
+            notes.append(query_text_by_line[line_id])
+        notes_by_line[line_id] = "<br/>".join(notes)
+
     def line_link(line_id, text: str) -> str:
         if line_id in printed_line_ids:
             return f'<a href="#line-{line_id}" color="{LINK}">{text}</a>'
@@ -608,7 +689,7 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
                 ],
                 [w * width for w in (0.12, 0.32, 0.07, 0.1, 0.1, 0.1, 0.11, 0.08)],
                 styles,
-                remarks_by_line,
+                notes_by_line,
                 right_cols=(3, 4, 5, 6),
             )
         )
@@ -631,7 +712,7 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
                 ],
                 [w * width for w in (0.15, 0.5, 0.1, 0.12, 0.13)],
                 styles,
-                remarks_by_line,
+                notes_by_line,
                 right_cols=(3, 4),
             )
         )
@@ -681,43 +762,25 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
             )
         )
 
-    # Queries and actions
-    queries = list(_queries(audit))
-    actions_by_query = {}
-    for action in _actions(audit):
-        actions_by_query.setdefault(action.query_id, []).append(action)
-    story.append(Paragraph(f"Queries and actions ({len(queries):,} queries)", styles["h2"]))
-    if queries:
-        rows = []
-        for query in queries:
-            reply = _reply_of(query)
-            action_text = "\n".join(
-                f"• {a.description} — {_name(a.owner)}, {a.get_status_display()}"
-                + (f", due {a.due_date:%d %b %Y}" if a.due_date else "")
-                for a in actions_by_query.get(query.pk, [])
-            )
-            rows.append(
-                [
-                    Paragraph(
-                        line_link(query.line_id, _esc(query.line.item_code)), styles["small"]
-                    ),
-                    _num(query.line.variance_value),
-                    query.get_status_display(),
-                    reply.text if reply else "",
-                    action_text or "—",
-                ]
-            )
+    # Queries are printed under their lines. A query whose line is in no table above (e.g. a
+    # recount made it OK) gets a short list here, so nothing is left out of the report.
+    other_queries = [query for query in queries if query.line_id not in printed_line_ids]
+    if other_queries:
+        story.append(Paragraph(f"Other queries ({len(other_queries):,})", styles["h2"]))
         story.append(
             _table(
-                ["Item No", "Var. value", "Status", "Reply", "Actions"],
-                rows,
-                [w * width for w in (0.12, 0.1, 0.12, 0.33, 0.33)],
+                ["Item No", "Query"],
+                [
+                    [
+                        query.line.item_code,
+                        Paragraph(query_text_by_line[query.line_id], styles["small"]),
+                    ]
+                    for query in other_queries
+                ],
+                [w * width for w in (0.14, 0.86)],
                 styles,
-                right_cols=(1,),
             )
         )
-    else:
-        story.append(Paragraph("No queries.", body))
 
     # Photos: each caption links back to its line; a line's first photo is where that line's
     # "Photos (n)" link lands.

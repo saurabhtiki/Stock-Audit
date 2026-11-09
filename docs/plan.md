@@ -688,3 +688,19 @@ New features, email alerts, changing who can do what, links from the PDF to the 
 - PDF: line remark under its variance row; Remarks section has general remarks only; photo ↔ line links present
 - audit page still shows stage, Checking Done / Locked info and all counts
 - all existing tests keep passing
+
+## Phase 8.1 — Pilot fixes: query under its line in the PDF, one tab look, simpler Home (DONE — 386 tests pass)
+
+### What changed
+- **PDF:** the separate "Queries and actions" table is gone. Each variance line now has its query in the grey
+  row under it, after its remarks: status, reply (or "No reply yet"), latest update, closing note when Closed,
+  and each action with owner, status, due date and **(overdue)**. A query whose line is in no table (e.g. a
+  recount made it OK) goes in a short "Other queries" list. The Count summary gains "Queries — Not closed / Closed".
+- **Query page:** tabs use the shared `app-tabs` look (same as Audit page and Dashboard).
+- **Home:** "Your Branches" list removed; "Go to audits" button stays, and the "No Branches open to you" warning
+  still shows when a user has none.
+
+### Tests
+`tests/test_phase8_1.py`: query block under its line (reply, update, overdue action, summary count), no-reply and
+closed-note text, query on an OK line in "Other queries", Query page uses `app-tabs`, Home has no Branch list.
+Also made a Phase 7 test check the cell text (`>N1<`) so a random token can't fail it.

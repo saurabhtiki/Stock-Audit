@@ -18,23 +18,12 @@
 
   {% if pending_tab %}{% include "audits/partials/pending_items.html" %}{% endif %}
 
-  <section class="mt-6">
-    <h2 class="mb-2 text-lg font-bold">Your Branches</h2>
-    {% if branches %}
-      <ul class="list rounded-box bg-base-100">
-        {% for branch in branches %}
-          <li class="list-row">
-            <span class="badge badge-ghost font-bold">{{ branch.code }}</span>
-            <span>{{ branch.name }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <div role="alert" class="alert alert-soft alert-info">
-        <span>No Branches are open to you in this company yet. Ask Admin to give you rights.</span>
-      </div>
-    {% endif %}
-  </section>
-  {% if branches %}<a href="{% url 'audits:audit_list' %}" class="btn btn-primary mt-6">Go to audits</a>{% endif %}
+  {% if branches %}
+    <a href="{% url 'audits:audit_list' %}" class="btn btn-primary mt-6" title="Open the audits of your Branches">Go to audits</a>
+  {% else %}
+    <div role="alert" class="alert alert-soft alert-info mt-6">
+      <span>No Branches are open to you in this company yet. Ask Admin to give you rights.</span>
+    </div>
+  {% endif %}
 {% endif %}
 {% endblock %}

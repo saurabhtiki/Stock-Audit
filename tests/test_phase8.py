@@ -193,8 +193,8 @@ def test_pdf_line_remarks_general_remarks_and_links(raised, media_user, locker, 
     assert "General remarks \\(1\\)" in text and "Store was tidy" in text
     assert "Remarks on OK lines \\(1\\)" in text and "Label faded" in text
     assert "Photos \\(1\\)" in text and "Go to the line" in text
-    # Jumps inside the PDF: line row → its photo, photo → line row, query → line row.
-    assert text.count("/Subtype /Link") == 3
+    # Jumps inside the PDF: line row → its photo, photo → line row (queries sit under their line).
+    assert text.count("/Subtype /Link") == 2
     assert text.count("/Subtype /Image") == 2  # the photo + the company logo
 
 
