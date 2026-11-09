@@ -12,10 +12,18 @@ from django.utils import timezone
 from django.utils.cache import patch_vary_headers
 
 from audits import dashboards
-from audits.models import Audit, AuditLine, Query
+from audits.models import Action, Audit, AuditLine, Query
 from audits.permissions import branches_with_right, forbidden
 from audits.views import _is_htmx, _vary_on_htmx
-from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable, rows_csv_response
+from core.datatable import (
+    CHOICE,
+    DATE,
+    NUMBER,
+    Column,
+    DataTable,
+    RowsTable,
+    rows_csv_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +52,39 @@ STATUS_COLUMNS = [
     Column("pct_counted", "% counted", type=NUMBER),
     Column("open_queries", "Open queries", type=NUMBER),
 ]
+
+
+OVERDUE_COLUMNS = [
+    Column("branch_code", "Branch", type=CHOICE),
+    Column("audit_title", "Audit"),
+    Column("item_code", "Item No"),
+    Column("description", "Action"),
+    Column("owner_name", "Owner", type=CHOICE),
+    Column("status", "Status", type=CHOICE, choices=dict(Action.Status.choices)),
+    Column("due_date", "Due", type=DATE),
+    Column(
+        "days_late",
+        "Days late",
+        type=NUMBER,
+        filterable=False,  # a day count worked out from today; filter on "Due" instead
+        csv_value=lambda action: action.days_late.days,
+    ),
+]
+
+REPEAT_COLUMNS = [
+    Column("branch_code", "Branch", type=CHOICE),
+    Column("item_code", "Item No"),
+    Column("description", "Description"),
+    Column("streak", "Audits in a row", type=NUMBER),
+    Column("total_value", "Total variance value", type=NUMBER),
+]
+
+# Tables inside a dashboard tab: a click inside one redraws only that table.
+TABLE_TEMPLATES = {
+    "status-table": "audits/partials/dashboard_status_table.html",
+    "overdue-table": "audits/partials/dashboard_overdue_table.html",
+    "repeat-table": "audits/partials/dashboard_repeat_table.html",
+}
 
 
 def _csv_name(tab: str) -> str:
@@ -111,12 +152,30 @@ def _queries_context(request, filters):
             for i, label in enumerate(age_labels)
         ],
     }
-    return {
-        "age_labels": age_labels,
-        "ageing": ageing,
-        "ageing_chart": chart,
-        "overdue": dashboards.overdue_actions(filters),
-    }
+    overdue = DataTable(
+        request.GET,
+        dashboards.overdue_actions(filters),
+        OVERDUE_COLUMNS,
+        table_id="overdue-table",
+        default_sort=("due_date",),
+        search_fields=("description", "query__line__item_code", "query__line__description"),
+        search_placeholder="Search action, item code or description",
+        base_url=request.path,
+        noun="actions",
+        keep=dashboards.FILTER_PARAMS,
+        csv_params=[("part", "overdue")],
+        shortcuts=[
+            ("All", "status", "", "Every overdue action, Open and Done"),
+            ("Open", "status", Action.Status.OPEN, "Not done yet"),
+            (
+                "Waiting to verify",
+                "status",
+                Action.Status.DONE,
+                "Marked Done by the owner, but nobody has verified it yet",
+            ),
+        ],
+    )
+    return {"age_labels": age_labels, "ageing": ageing, "ageing_chart": chart, "table": overdue}
 
 
 def _add_detail_links(rows, filters, kind: str, make_params) -> None:
@@ -159,14 +218,24 @@ def _variance_context(request, filters):
 
 
 def _repeat_context(request, filters):
-    rows = dashboards.repeat_items(filters)
-    _add_detail_links(
-        rows,
-        filters,
-        "repeat",
-        lambda row: [("row_branch", row["branch_id"]), ("item", row["item_id"])],
+    # Runs are found in Python, so the table works on those rows (RowsTable), not on SQL.
+    rows = sorted(
+        dashboards.repeat_items(filters),
+        # Grouped by Branch; inside a Branch the longest runs and biggest losses first.
+        key=lambda row: (row["branch_code"], -row["streak"], row["total_value"], row["item_code"]),
     )
-    return {"rows": rows}
+    table = RowsTable(
+        request.GET,
+        rows,
+        REPEAT_COLUMNS,
+        table_id="repeat-table",
+        search_fields=("item_code", "description"),
+        search_placeholder="Search item code or description",
+        base_url=request.path,
+        noun="items",
+        keep=dashboards.FILTER_PARAMS,
+    )
+    return {"table": table}
 
 
 def _trend_context(request, filters):
@@ -227,32 +296,7 @@ def _csv(tab: str, context: dict):
     """CSV of what the tab shows (the status grid streams its own, with all its filters)."""
     if tab == "queries":
         if context.get("csv_part") == "overdue":
-            return rows_csv_response(
-                _csv_name("overdue_actions"),
-                [
-                    "Branch",
-                    "Audit",
-                    "Item No",
-                    "Action",
-                    "Owner",
-                    "Status",
-                    "Due date",
-                    "Days late",
-                ],
-                [
-                    [
-                        r["branch"],
-                        r["audit"],
-                        r["item_code"],
-                        r["description"],
-                        r["owner"],
-                        r["status"],
-                        r["due_date"],
-                        r["days_late"],
-                    ]
-                    for r in context["overdue"]
-                ],
-            )
+            return context["table"].csv_response(_csv_name("overdue_actions"))
         return rows_csv_response(
             _csv_name("query_ageing"),
             ["Branch", *(f"{label} days" for label in context["age_labels"]), "Total open"],
@@ -268,14 +312,7 @@ def _csv(tab: str, context: dict):
             ],
         )
     if tab == "repeat":
-        return rows_csv_response(
-            _csv_name(tab),
-            ["Branch", "Item No", "Description", "Audits in a row", "Total variance value"],
-            [
-                [r["branch"], r["item_code"], r["description"], r["streak"], r["total_value"]]
-                for r in context["rows"]
-            ],
-        )
+        return context["table"].csv_response(_csv_name(tab))
     return rows_csv_response(
         _csv_name(tab),
         [
@@ -361,8 +398,9 @@ def dashboard(request, tab: str = "status"):
             + [("export", "csv")]
         ),
     )
-    if _is_htmx(request) and request.headers.get("HX-Target") == "status-table":
-        template = "audits/partials/dashboard_status_table.html"
+    hx_target = request.headers.get("HX-Target", "")
+    if _is_htmx(request) and hx_target in TABLE_TEMPLATES:
+        template = TABLE_TEMPLATES[hx_target]
     elif _is_htmx(request):
         template = "audits/partials/dashboard_body.html"
     else:
@@ -372,7 +410,7 @@ def dashboard(request, tab: str = "status"):
     return response
 
 
-DETAIL_KINDS = ("variance", "repeat", "trend")
+DETAIL_KINDS = ("variance", "trend")
 
 
 def _detail_problem(request, message: str, status: int = 400):
@@ -398,30 +436,23 @@ def dashboard_detail(request, kind: str):
     filters = dashboards.read_filters(request.GET, allowed)
     context = {"kind": kind}
 
-    if kind in ("variance", "repeat"):
+    if kind == "variance":
         branch_id = _int_param(request.GET, "row_branch")
         if branch_id not in filters.branch_ids:
             return _detail_problem(
                 request, "This Branch is not in your dashboard filters, so its rows are hidden."
             )
-    if kind == "variance":
         month = dashboards._month_start(request.GET.get("month", ""))
         if month is None:
             return _detail_problem(request, "The month is missing or not like 2026-04.")
         lines = dashboards.variance_detail(filters, branch_id, month)
-    elif kind == "trend":
+    else:
         audit_id = _int_param(request.GET, "audit")
         if audit_id is None or not filters.final_audits().filter(pk=audit_id).exists():
             return _detail_problem(
                 request, "This audit is not a counted audit inside your dashboard filters."
             )
         lines = dashboards.audit_detail_lines(filters, audit_id)
-    else:
-        item_id = _int_param(request.GET, "item")
-        if item_id is None:
-            return _detail_problem(request, "The item is missing.")
-        context["runs"] = dashboards.item_runs(filters, branch_id, item_id)
-        return render(request, "audits/partials/dashboard_detail.html", context)
 
     table = _detail_table(request, kind, lines)
     if table.wants_csv:

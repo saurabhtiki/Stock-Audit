@@ -10,8 +10,20 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum
-from django.db.models.functions import Abs, TruncMonth
+from django.db.models import (
+    Count,
+    DateField,
+    DecimalField,
+    DurationField,
+    ExpressionWrapper,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Abs, Coalesce, NullIf, TruncMonth
 from django.utils import timezone
 
 from audits.models import Action, Audit, AuditLine, Item, Query
@@ -196,29 +208,28 @@ def ageing_rows(filters: DashboardFilters, today: date | None = None) -> list[di
     ]
 
 
-def overdue_actions(filters: DashboardFilters, today: date | None = None) -> list[dict]:
-    """Actions past their due date and not Verified, oldest due date first."""
+def overdue_actions(filters: DashboardFilters, today: date | None = None):
+    """Actions past their due date and not Verified, oldest due date first. "Done" actions
+    stay in the list until someone verifies them (the screen marks them "waiting to verify").
+    Each row gets branch_code, audit_title, item_code, owner_name and days_late."""
     today = today or timezone.localdate()
-    actions = (
+    return (
         Action.objects.filter(query__audit__in=filters.final_audits(), due_date__lt=today)
         .exclude(status=Action.Status.VERIFIED)
-        .select_related("owner", "query__audit__branch", "query__line")
+        .annotate(
+            branch_code=F("query__audit__branch__code"),
+            audit_title=F("query__audit__title"),
+            item_code=F("query__line__item_code"),
+            # Full name, or the username when the full name is blank.
+            owner_name=Coalesce(NullIf(F("owner__full_name"), Value("")), F("owner__username")),
+            # Bigger number = longer late; sorting on it is the same as on the due date.
+            days_late=ExpressionWrapper(
+                Value(today, output_field=DateField()) - F("due_date"),
+                output_field=DurationField(),
+            ),
+        )
         .order_by("due_date", "id")
     )
-    return [
-        {
-            "branch": action.query.audit.branch.code,
-            "audit": action.query.audit.title,
-            "item_code": action.query.line.item_code,
-            "description": action.description,
-            "owner": action.owner.full_name or action.owner.username,
-            "status": action.get_status_display(),
-            "due_date": action.due_date,
-            "days_late": (today - action.due_date).days,
-            "query_id": action.query_id,
-        }
-        for action in actions
-    ]
 
 
 # ---------- Variance ----------
@@ -319,7 +330,7 @@ def repeat_items(filters: DashboardFilters, min_streak: int = 2) -> list[dict]:
     rows = [
         {
             "branch_id": branch_id,
-            "branch": branch_code,
+            "branch_code": branch_code,
             "item_id": item_id,
             "item_code": items[item_id].code,
             "description": items[item_id].description,
@@ -329,7 +340,9 @@ def repeat_items(filters: DashboardFilters, min_streak: int = 2) -> list[dict]:
         }
         for branch_id, branch_code, item_id, run in found
     ]
-    rows.sort(key=lambda row: (-row["streak"], row["total_value"], row["branch"], row["item_code"]))
+    rows.sort(
+        key=lambda row: (-row["streak"], row["total_value"], row["branch_code"], row["item_code"])
+    )
     return rows
 
 
@@ -380,6 +393,7 @@ def trend_rows(filters: DashboardFilters, branch=None, item=None) -> list[dict]:
 
 # ---------- Drilldown: the rows behind one summary row ----------
 
+
 def _with_query(lines):
     """Lines with their query (if any) and its status, biggest variance value first."""
     return (
@@ -406,16 +420,3 @@ def variance_detail(filters: DashboardFilters, branch_id: int, month: date):
 def audit_detail_lines(filters: DashboardFilters, audit_id: int):
     """Counted lines with a variance value in one counted audit (the trend tab row)."""
     return _with_query(counted_lines(filters).filter(audit_id=audit_id).exclude(variance_value=0))
-
-
-def item_runs(filters: DashboardFilters, branch_id: int, item_id: int) -> list:
-    """Every counted audit of the Branch in the filters, oldest first, with this item's line
-    (None when the item was not in that audit), so the run and its breaks are both visible."""
-    audits = list(filters.final_audits().filter(branch_id=branch_id).order_by("audit_date", "id"))
-    lines = {
-        line.audit_id: line
-        for line in AuditLine.objects.filter(audit__in=audits, item_id=item_id).select_related(
-            "query"
-        )
-    }
-    return [{"audit": audit, "line": lines.get(audit.pk)} for audit in audits]

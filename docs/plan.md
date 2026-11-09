@@ -625,3 +625,66 @@ New user features, email alerts, automatic/scheduled backups, PostgreSQL, trying
 - `seed_demo` runs in test, refused in production; pytest never writes into `media/test/`
 - `serve` command starts Waitress (smoke test with a short run); `check --deploy` clean with production settings
 - acceptance criteria 1–10 each pass end-to-end
+
+## Phase 8 — Pilot feedback: look & feel, dashboard, PDF (DONE — 381 tests pass)
+
+Built notes: top bar split into `partials/nav_links.html`, `admin_links.html`, `user_links.html` (used by the
+wide bar and the phone drawer). Shared tab look = CSS class `app-tabs` in `static/css/app.css`; compact audit
+header = `audits/partials/audit_progress.html` + `mini-stat` boxes. Overdue actions and Repeat items use
+`core/datatable.py` (`dashboard_overdue_*.html`, `dashboard_repeat_*.html`); the table got `csv_params`
+(the Queries tab has two CSVs: ageing, and overdue with `part=overdue`). Repeat runs are found in Python, so
+they use `RowsTable` (same table and templates, but filters / sort / counts run on a list of dicts).
+Code review fixes: overdue Owner falls back to username; the two theme switches stay in step; the phone menu
+closes on Back and Esc; the PDF reads only ticked photos from the database; `Attachment.about_line` shared
+by the PDF and `target_label`. Tests: `tests/test_phase8.py`.
+
+Changed from the plan while building:
+- PDF: **Not counted** lines also show their remarks under them, and remarks on **OK lines** (in no table)
+  get a short "Remarks on OK lines" list, so no remark disappears from the report.
+- Overdue "Days late" can be sorted but not filtered (filter on "Due" instead). Quick buttons:
+  All / Open / Waiting to verify.
+- The repeat-items ▸ drilldown was removed (URL kind `repeat` now gives 404).
+- Not checked in a real browser from here (the browser pane could not open localhost) — check on the pilot PC:
+  phone menu, tab look, audit page top, PDF links.
+
+Goal: fix what the first pilot users noticed: one bug (filter box hidden), clearer screens, a phone menu,
+and a PDF that reads line by line.
+
+Example: on a phone, the user taps ☰ and sees Dashboard / Audits / Queries / Items in a side menu.
+On the audit page the table shows without scrolling past big banners. In the PDF, line FG00001 shows
+its remark right under it and "📷 2"; clicking it jumps to the photos, and each photo's caption jumps back.
+
+### Decisions (from grilling — all recommended answers confirmed)
+| # | Decision |
+|---|---|
+| 1 | All 8 items in one phase (Phase 8). |
+| 2 | **Phone menu**: on narrow screens the top bar shows logo + company + ☰; ☰ opens a side drawer (DaisyUI `drawer`) with every menu item (Dashboard, Audits, Queries, Items, Admin items, theme, profile, logout). Wide screens unchanged. |
+| 3 | **Overdue actions**: keep "Done" (not yet Verified) rows; amber badge "Done – waiting to verify", Open = red; Status filter to hide them. |
+| 4 | **Repeat items** move to the table component (search, Branch filter, sort, pages, CSV). The ▸ expander is dropped; Item No opens the latest query, which shows the item's history. |
+| 5 | **One tab style**: dashboard tabs and audit-page tabs = blue joined buttons like the Queries quick filter; active one filled; counts as small badges. |
+| 6 | **Compact audit page top**: steps 1–4 as a thin line by the title; "Checking Done" + "Locked" banners → one short line with details in a tooltip; all numbers (ERP lines, value, tolerance, counted, not counted, OK, Excess, Shortage) in one row of small boxes, wrapping on phones. |
+| 7 | **PDF line remarks**: small grey lines under each variance row (`💬 text – name, date`); Remarks section = general remarks only. |
+| 8 | **PDF links inside the PDF only**: photo caption "Item FG00001" jumps to its variance row; the row shows "📷 n" and jumps to its photos; a short "Other files" list (videos, documents) names the item / query. No links to the web app. |
+| 9 | Company **logo** in the top bar (32 px, left of app name) **and** at the top of the PDF. No logo → nothing changes. |
+| 10 | **Filter box bug**: the 1st column's filter pop-up is hidden behind the fixed 1st-column cells (fixed header cell has `z-index: 1`). Fixed once in `static/css/app.css`, so all tables are fixed. |
+
+### What gets built
+1. `static/css/app.css`: header fixed cell above body fixed cells, so the filter pop-up shows on top.
+2. `templates/partials/navbar.html` + `base.html`: logo; drawer + ☰ for narrow screens (one list of links used by both).
+3. Shared tab partial used by `dashboard_body.html` and `audit_detail.html`.
+4. Overdue actions and Repeat items → `core/datatable.py` tables (with `?export=csv`), dashboard filters still apply.
+5. `audit_detail.html` / `count_stats.html`: compact header.
+6. `audits/reports.py`: logo in header, remarks under variance rows, general-only Remarks, in-PDF anchors/links, "Other files" list.
+7. Rebuild `static/css/tailwind.css` after new classes (`tools/build_css.ps1`).
+
+### Not in this phase
+New features, email alerts, changing who can do what, links from the PDF to the web app.
+
+### Tests
+- top bar shows the current company's logo; no logo → no broken image; PDF builds with and without logo
+- phone menu: drawer has the same links as the desktop menu; Admin items only for Admin
+- overdue: Done rows shown with their badge; Status filter hides them; Verified never shown
+- overdue + repeat items: filters, sort, pages, CSV = all matching rows; other company's rows never show
+- PDF: line remark under its variance row; Remarks section has general remarks only; photo ↔ line links present
+- audit page still shows stage, Checking Done / Locked info and all counts
+- all existing tests keep passing

@@ -344,14 +344,18 @@ def _table(headings, rows, widths, styles, right_cols=()):
     return table
 
 
-def _photo_cell(attachment, styles, width):
+def _photo_cell(attachment, styles, width, anchor: str = "", link: str = ""):
+    """One photo with its caption. `anchor` marks it as a link target, `link` jumps to its line."""
+    extra = f"<br/>{link}" if link else ""
     try:
         with attachment.file.open("rb") as handle:
             data = io.BytesIO(handle.read())
         image = Image(data)
     except (OSError, ValueError) as error:
         logger.error("Photo %s missing or unreadable for PDF: %s", attachment.pk, error)
-        return Paragraph(_esc(f"Photo missing: {attachment.original_name}"), styles["small"])
+        return Paragraph(
+            f"{anchor}{_esc(f'Photo missing: {attachment.original_name}')}{extra}", styles["small"]
+        )
     scale = min(width / image.imageWidth, 70 * mm / image.imageHeight)
     image.drawWidth, image.drawHeight = image.imageWidth * scale, image.imageHeight * scale
     caption = (
@@ -359,7 +363,63 @@ def _photo_cell(attachment, styles, width):
         f"{timezone.localtime(attachment.uploaded_at):%d %b %Y}"
     )
     title = attachment.note or attachment.original_name
-    return [image, Paragraph(f"<b>{_esc(title)}</b><br/>{_esc(caption)}", styles["small"])]
+    text = f"{anchor}<b>{_esc(title)}</b><br/>{_esc(caption)}{extra}"
+    return [image, Paragraph(text, styles["small"])]
+
+
+LINK = "#1d4ed8"  # blue for links inside the PDF
+REMARK_GREY = "#555555"
+
+
+def _line_id_of(attachment) -> int | None:
+    """Id of the audit line a photo / file is about (None for the whole audit)."""
+    line = attachment.about_line
+    return line.pk if line else None
+
+
+def _logo(company, height):
+    """The company logo scaled to `height` (at most 5 cm wide), or None if there is none."""
+    if not company.logo:
+        return None
+    try:
+        with company.logo.open("rb") as handle:
+            image = Image(io.BytesIO(handle.read()))
+    except (OSError, ValueError) as error:
+        logger.error("Logo of company %s missing or unreadable for PDF: %s", company.pk, error)
+        return None
+    scale = min(height / image.imageHeight, 50 * mm / image.imageWidth)
+    image.drawWidth, image.drawHeight = image.imageWidth * scale, image.imageHeight * scale
+    return image
+
+
+def _remark_text(remarks) -> str:
+    """One line's remarks as small grey text: “Remark: Found 36 kg in rack B – Het Shah, 07 Nov 2026”."""
+    return "<br/>".join(
+        f'<font color="{REMARK_GREY}"><i>Remark:</i> {_esc(r.text)} – '
+        f"{_esc(_name(r.created_by))}, {_when(r.created_at)}</font>"
+        for r in remarks
+    )
+
+
+def _lines_table(headings, lines, make_cells, widths, styles, remarks_by_line, right_cols=()):
+    """A table of audit lines; each line's remarks sit in a full-width grey row right under it.
+    `make_cells(line)` gives the cells as Paragraph markup (already escaped)."""
+    small = styles["small"]
+    data = [headings]
+    style = TableStyle(GRID.getCommands())
+    for col in right_cols:
+        style.add("ALIGN", (col, 1), (col, -1), "RIGHT")
+    for line in lines:
+        data.append([Paragraph(cell, small) for cell in make_cells(line)])
+        line_remarks = remarks_by_line.get(line.pk)
+        if line_remarks:
+            data.append([Paragraph(_remark_text(line_remarks), small)] + [""] * (len(headings) - 1))
+            row = len(data) - 1
+            style.add("SPAN", (0, row), (-1, row))
+            style.add("BACKGROUND", (0, row), (-1, row), colors.HexColor("#f4f4f5"))
+    table = LongTable(data, colWidths=widths, repeatRows=1)
+    table.setStyle(style)
+    return table
 
 
 def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
@@ -394,7 +454,16 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
 
     story = []
     company = audit.branch.company
-    story.append(Paragraph(_esc(f"{company.name} – Stock audit report"), styles["title"]))
+    title = Paragraph(_esc(f"{company.name} – Stock audit report"), styles["title"])
+    logo = _logo(company, 14 * mm)
+    if logo is None:
+        story.append(title)
+    else:
+        heading = Table([[logo, title]], colWidths=[logo.drawWidth + 4 * mm, None])
+        heading.setStyle(
+            TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (0, 0), 0)])
+        )
+        story.append(heading)
     facts = [
         ["Audit", audit.title, "Branch", str(audit.branch)],
         ["Type", audit.get_audit_type_display(), "Stage", audit.get_stage_display()],
@@ -456,14 +525,66 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
     )
     story.append(summary_table)
 
+    # Remarks of a line print right under that line; the Remarks section keeps general ones.
+    remarks_by_line: dict = {}
+    general_remarks = []
+    for remark in _remarks(audit):
+        if remark.line_id:
+            remarks_by_line.setdefault(remark.line_id, []).append(remark)
+        else:
+            general_remarks.append(remark)
+
+    # Photos ticked for the report, and other files (videos, documents), each tied to its line.
+    attachments = (
+        Attachment.objects.filter(audit=audit, is_deleted=False)
+        .select_related("line", "query__line", "action__query__line", "uploaded_by")
+        .order_by("uploaded_at", "id")
+    )
+    photos = attachments.filter(kind=Attachment.Kind.PHOTO, include_in_report=True)
+    ticked_photo_count = photos.count()
+    printed_photos = list(photos[: settings.PDF_MAX_PHOTOS])
+    other_files = list(attachments.exclude(kind=Attachment.Kind.PHOTO))
+    photos_by_line: dict = {}
+    for photo in printed_photos:
+        photos_by_line.setdefault(_line_id_of(photo), []).append(photo)
+    files_by_line: dict = {}
+    for attachment in other_files:
+        files_by_line.setdefault(_line_id_of(attachment), []).append(attachment)
+
+    variance_lines = list(
+        audit.lines.filter(
+            count_status__in=(AuditLine.Status.EXCESS, AuditLine.Status.SHORTAGE)
+        ).order_by("item_code")
+    )
+    not_counted = list(
+        audit.lines.filter(count_status=AuditLine.Status.NOT_COUNTED).order_by("item_code")
+    )
+    # Lines printed in a table above, so links can jump to them.
+    printed_line_ids = {line.pk for line in variance_lines} | {line.pk for line in not_counted}
+
+    def line_link(line_id, text: str) -> str:
+        if line_id in printed_line_ids:
+            return f'<a href="#line-{line_id}" color="{LINK}">{text}</a>'
+        return text
+
+    def item_cell(line) -> str:
+        """Item No with an anchor (photos, files and queries jump here) and links to its media."""
+        text = f'<a name="line-{line.pk}"/>{_esc(line.item_code)}'
+        photo_count = len(photos_by_line.get(line.pk, []))
+        if photo_count:
+            text += (
+                f'<br/><a href="#photos-line-{line.pk}" color="{LINK}">Photos ({photo_count})</a>'
+            )
+        file_count = len(files_by_line.get(line.pk, []))
+        if file_count:
+            text += f'<br/><a href="#other-files" color="{LINK}">Files ({file_count})</a>'
+        return text
+
     # Variances
-    variance_lines = audit.lines.filter(
-        count_status__in=(AuditLine.Status.EXCESS, AuditLine.Status.SHORTAGE)
-    ).order_by("item_code")
     story.append(Paragraph(f"Variances ({len(variance_lines):,} lines)", styles["h2"]))
     if variance_lines:
         story.append(
-            _table(
+            _lines_table(
                 [
                     "Item No",
                     "Description",
@@ -474,21 +595,20 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
                     "Var. value",
                     "Status",
                 ],
-                [
-                    [
-                        ln.item_code,
-                        ln.description,
-                        ln.uom,
-                        _qty(ln.erp_qty),
-                        _qty(ln.physical_qty),
-                        _qty(ln.variance_qty),
-                        _num(ln.variance_value),
-                        ln.get_count_status_display(),
-                    ]
-                    for ln in variance_lines
+                variance_lines,
+                lambda ln: [
+                    item_cell(ln),
+                    _esc(ln.description),
+                    _esc(ln.uom),
+                    _qty(ln.erp_qty),
+                    _qty(ln.physical_qty),
+                    _qty(ln.variance_qty),
+                    _num(ln.variance_value),
+                    ln.get_count_status_display(),
                 ],
                 [w * width for w in (0.12, 0.32, 0.07, 0.1, 0.1, 0.1, 0.11, 0.08)],
                 styles,
+                remarks_by_line,
                 right_cols=(3, 4, 5, 6),
             )
         )
@@ -496,48 +616,70 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
         story.append(Paragraph("No Excess or Shortage lines.", body))
 
     # Not counted
-    not_counted = audit.lines.filter(count_status=AuditLine.Status.NOT_COUNTED).order_by(
-        "item_code"
-    )
     story.append(Paragraph(f"Not counted ({summary['not_counted']:,} lines)", styles["h2"]))
-    if summary["not_counted"]:
+    if not_counted:
         story.append(
-            _table(
+            _lines_table(
                 ["Item No", "Description", "UoM", "ERP Qty", "ERP value"],
-                [
-                    [ln.item_code, ln.description, ln.uom, _qty(ln.erp_qty), _num(ln.erp_value)]
-                    for ln in not_counted
+                not_counted,
+                lambda ln: [
+                    item_cell(ln),
+                    _esc(ln.description),
+                    _esc(ln.uom),
+                    _qty(ln.erp_qty),
+                    _num(ln.erp_value),
                 ],
                 [w * width for w in (0.15, 0.5, 0.1, 0.12, 0.13)],
                 styles,
+                remarks_by_line,
                 right_cols=(3, 4),
             )
         )
     else:
         story.append(Paragraph("Every line was counted.", body))
 
-    # Remarks
-    remarks = list(_remarks(audit))
-    story.append(Paragraph(f"Remarks ({len(remarks):,})", styles["h2"]))
-    if remarks:
+    # General remarks. Remarks on OK lines are in no table above, so they get a short list
+    # of their own and nothing is left out of the report.
+    story.append(Paragraph(f"General remarks ({len(general_remarks):,})", styles["h2"]))
+    if general_remarks:
+        story.append(
+            _table(
+                ["Remark", "By", "When"],
+                [
+                    [remark.text, _name(remark.created_by), _when(remark.created_at)]
+                    for remark in general_remarks
+                ],
+                [w * width for w in (0.7, 0.15, 0.15)],
+                styles,
+            )
+        )
+    else:
+        story.append(Paragraph("No general remarks.", body))
+    ok_line_remarks = [
+        remark
+        for line_id, line_remarks in remarks_by_line.items()
+        if line_id not in printed_line_ids
+        for remark in line_remarks
+    ]
+    if ok_line_remarks:
+        ok_line_remarks.sort(key=lambda remark: (remark.line.item_code, remark.created_at))
+        story.append(Paragraph(f"Remarks on OK lines ({len(ok_line_remarks):,})", styles["h2"]))
         story.append(
             _table(
                 ["Item No", "Remark", "By", "When"],
                 [
                     [
-                        r.line.item_code if r.line_id else "General",
-                        r.text,
-                        _name(r.created_by),
-                        _when(r.created_at),
+                        remark.line.item_code,
+                        remark.text,
+                        _name(remark.created_by),
+                        _when(remark.created_at),
                     ]
-                    for r in remarks
+                    for remark in ok_line_remarks
                 ],
                 [w * width for w in (0.14, 0.56, 0.15, 0.15)],
                 styles,
             )
         )
-    else:
-        story.append(Paragraph("No remarks.", body))
 
     # Queries and actions
     queries = list(_queries(audit))
@@ -556,7 +698,9 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
             )
             rows.append(
                 [
-                    query.line.item_code,
+                    Paragraph(
+                        line_link(query.line_id, _esc(query.line.item_code)), styles["small"]
+                    ),
                     _num(query.line.variance_value),
                     query.get_status_display(),
                     reply.text if reply else "",
@@ -575,30 +719,67 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
     else:
         story.append(Paragraph("No queries.", body))
 
-    # Photos
-    photos = list(
-        Attachment.objects.filter(
-            audit=audit, kind=Attachment.Kind.PHOTO, include_in_report=True, is_deleted=False
-        )
-        .select_related("line", "query__line", "action__query__line", "uploaded_by")
-        .order_by("uploaded_at", "id")
-    )
-    if photos:
-        limit = settings.PDF_MAX_PHOTOS
-        story.append(Paragraph(f"Photos ({len(photos):,})", styles["h2"]))
-        if len(photos) > limit:
+    # Photos: each caption links back to its line; a line's first photo is where that line's
+    # "Photos (n)" link lands.
+    if ticked_photo_count:
+        story.append(Paragraph(f"Photos ({ticked_photo_count:,})", styles["h2"]))
+        if ticked_photo_count > len(printed_photos):
             story.append(
                 Paragraph(
-                    f"Only the first {limit} of {len(photos):,} ticked photos are printed.", body
+                    f"Only the first {len(printed_photos)} of {ticked_photo_count:,} ticked photos "
+                    "are printed.",
+                    body,
                 )
             )
         cell_width = width / 2 - 4 * mm
-        cells = [_photo_cell(photo, styles, cell_width) for photo in photos[:limit]]
+        anchored: set = set()
+        cells = []
+        for photo in printed_photos:
+            line_id = _line_id_of(photo)
+            anchor = ""
+            if line_id and line_id not in anchored:
+                anchor = f'<a name="photos-line-{line_id}"/>'
+                anchored.add(line_id)
+            link = line_link(line_id, "Go to the line") if line_id in printed_line_ids else ""
+            cells.append(_photo_cell(photo, styles, cell_width, anchor=anchor, link=link))
         if len(cells) % 2:
             cells.append("")
         grid = Table([cells[i : i + 2] for i in range(0, len(cells), 2)], colWidths=[width / 2] * 2)
         grid.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(grid)
+
+    # Other files (videos, documents) can't be printed: list them with where they belong.
+    if other_files:
+        story.append(
+            Paragraph(f'<a name="other-files"/>Other files ({len(other_files):,})', styles["h2"])
+        )
+        story.append(
+            _table(
+                ["Belongs to", "Kind", "File", "Note", "By", "When"],
+                [
+                    [
+                        Paragraph(
+                            line_link(_line_id_of(attachment), _esc(attachment.target_label)),
+                            styles["small"],
+                        ),
+                        attachment.get_kind_display(),
+                        attachment.original_name,
+                        attachment.note,
+                        _name(attachment.uploaded_by),
+                        _when(attachment.uploaded_at),
+                    ]
+                    for attachment in other_files
+                ],
+                [w * width for w in (0.16, 0.08, 0.26, 0.24, 0.13, 0.13)],
+                styles,
+            )
+        )
+        story.append(
+            Paragraph(
+                "Open them in the app: audit page → Photos &amp; files, or the line's remarks window.",
+                styles["small"],
+            )
+        )
 
     # Signatures
     signers = [

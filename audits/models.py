@@ -480,12 +480,23 @@ class Attachment(models.Model):
         raise ValidationError("Attachments are never deleted. Remove (hide) them instead.")
 
     @property
+    def about_line(self):
+        """The audit line it is about: its own line, or the line of its query / action.
+        None for a file on the whole audit."""
+        if self.action_id:
+            return self.action.query.line
+        if self.query_id:
+            return self.query.line
+        return self.line  # None when it belongs to the whole audit
+
+    @property
     def target_label(self) -> str:
         """Where it belongs, e.g. “ITM-007 · action” or “General”."""
+        line = self.about_line
+        if line is None:
+            return "General"
         if self.action_id:
-            return f"{self.action.query.line.item_code} · action"
+            return f"{line.item_code} · action"
         if self.query_id:
-            return f"{self.query.line.item_code} · query"
-        if self.line_id:
-            return self.line.item_code
-        return "General"
+            return f"{line.item_code} · query"
+        return line.item_code

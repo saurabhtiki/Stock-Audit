@@ -1,9 +1,8 @@
-{% load humanize %}{# Count counters; reloads itself after each saved count. Needs `audit`, `summary`. #}
-<div id="count-stats" hx-get="{% url 'audits:count_stats' audit.pk %}" hx-trigger="counts-changed from:body" hx-swap="outerHTML"
-     class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
-  <div class="stat"><div class="stat-title">Counted</div><div class="stat-value text-2xl">{{ summary.counted|intcomma }}</div><div class="stat-desc">of {{ summary.total|intcomma }} lines</div></div>
-  <div class="stat"><div class="stat-title">Not counted</div><div class="stat-value text-2xl">{{ summary.not_counted|intcomma }}</div><div class="stat-desc">No query is raised for these</div></div>
-  <div class="stat"><div class="stat-title">OK</div><div class="stat-value text-2xl text-success">{{ summary.ok|intcomma }}</div><div class="stat-desc">Within tolerance</div></div>
-  <div class="stat"><div class="stat-title">Excess</div><div class="stat-value text-2xl text-info">{{ summary.excess|intcomma }}</div><div class="stat-desc">Value {{ summary.excess_value|floatformat:2|intcomma }}</div></div>
-  <div class="stat"><div class="stat-title">Shortage</div><div class="stat-value text-2xl text-error">{{ summary.shortage|intcomma }}</div><div class="stat-desc">Value {{ summary.shortage_value|floatformat:2|intcomma }}</div></div>
+{% load humanize %}{# Count boxes inside the audit page's number row; reloads itself after each saved count. Needs `audit`, `summary`. #}
+<div id="count-stats" hx-get="{% url 'audits:count_stats' audit.pk %}" hx-trigger="counts-changed from:body" hx-swap="outerHTML" class="contents">
+  <div class="mini-stat" title="Lines with a Physical Qty, of {{ summary.total|intcomma }} lines"><div class="mini-stat-title">Counted</div><div class="mini-stat-value">{{ summary.counted|intcomma }}<span class="mini-stat-desc"> / {{ summary.total|intcomma }}</span></div></div>
+  <div class="mini-stat" title="Lines with no Physical Qty. No query is raised for these."><div class="mini-stat-title">Not counted</div><div class="mini-stat-value">{{ summary.not_counted|intcomma }}</div></div>
+  <div class="mini-stat" title="Counted lines whose variance is within tolerance"><div class="mini-stat-title">OK</div><div class="mini-stat-value text-success">{{ summary.ok|intcomma }}</div></div>
+  <div class="mini-stat" title="Lines with more stock than ERP. Value {{ summary.excess_value|floatformat:2|intcomma }}"><div class="mini-stat-title">Excess</div><div class="mini-stat-value text-info">{{ summary.excess|intcomma }}</div><div class="mini-stat-desc">{{ summary.excess_value|floatformat:2|intcomma }}</div></div>
+  <div class="mini-stat" title="Lines with less stock than ERP. Value {{ summary.shortage_value|floatformat:2|intcomma }}"><div class="mini-stat-title">Shortage</div><div class="mini-stat-value text-error">{{ summary.shortage|intcomma }}</div><div class="mini-stat-desc">{{ summary.shortage_value|floatformat:2|intcomma }}</div></div>
 </div>

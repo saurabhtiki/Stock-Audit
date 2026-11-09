@@ -1,0 +1,10 @@
+{% comment %}
+  The main menu links, drawn twice by navbar.html: as buttons in the wide top bar and as rows
+  in the phone side menu (as_menu=True wraps each in <li>), so both always list the same pages.
+{% endcomment %}
+{% if current_company %}
+  {% if as_menu %}<li>{% endif %}<a href="{% url 'audits:dashboard' %}" class="{{ link_class }}" title="Charts and summaries: audit status, open queries, variance, repeat items, trends">Dashboard</a>{% if as_menu %}</li>{% endif %}
+  {% if as_menu %}<li>{% endif %}<a href="{% url 'audits:audit_list' %}" class="{{ link_class }}" title="Audits of your Branches">Audits</a>{% if as_menu %}</li>{% endif %}
+  {% if as_menu %}<li>{% endif %}<a href="{% url 'audits:query_list' %}" class="{{ link_class }}" title="Queries raised for Excess / Shortage lines: replies and actions">Queries</a>{% if as_menu %}</li>{% endif %}
+  {% if as_menu %}<li>{% endif %}<a href="{% url 'audits:item_list' %}" class="{{ link_class }}" title="Item list of this company">Items</a>{% if as_menu %}</li>{% endif %}
+{% endif %}

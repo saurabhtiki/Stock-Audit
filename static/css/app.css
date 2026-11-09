@@ -109,6 +109,9 @@ th[aria-sort="descending"] .sort-button::after { content: "\25BC"; opacity: 1; }
 .dt-funnel:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .dt-panel { position: fixed; z-index: 50; overflow-y: auto; font-weight: 400; font-size: 14px; white-space: normal; text-align: left; }
 .data-table .dt-sticky { position: sticky; left: 0; z-index: 1; }
+/* The fixed header cell holds the 1st column's filter pop-up. Being fixed, it is its own layer,
+   so it must sit above the fixed body cells, or they hide the pop-up. */
+.data-table thead .dt-sticky { z-index: 3; }
 /* A narrow tick-box column first: it stays fixed too, and the next column sits right after it. */
 .data-table .dt-lead { width: 2.75rem; min-width: 2.75rem; max-width: 2.75rem; padding-inline: 0.75rem; }
 .data-table .dt-after-lead { left: 2.75rem; }
@@ -128,3 +131,52 @@ th[aria-sort="descending"] .sort-button::after { content: "\25BC"; opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* One tab look everywhere (dashboard, audit page): joined blue buttons like the Queries
+   quick filter; the open tab is filled blue. Works for link tabs and radio tabs. */
+.app-tabs { gap: 0; row-gap: 0.25rem; }
+.app-tabs > .tab {
+  height: 2.25rem;
+  padding-inline: 1rem;
+  border: 1px solid var(--color-primary);
+  margin-left: -1px;
+  border-radius: 0;
+  background: var(--color-base-100);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.app-tabs > .tab:first-of-type { margin-left: 0; border-start-start-radius: var(--radius-field); border-end-start-radius: var(--radius-field); }
+.app-tabs > .tab:last-of-type { border-start-end-radius: var(--radius-field); border-end-end-radius: var(--radius-field); }
+.app-tabs > .tab:hover { background: color-mix(in oklab, var(--color-primary) 10%, var(--color-base-100)); }
+.app-tabs > .tab:is(.tab-active, [aria-selected="true"], :has(input:checked)) {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}
+.app-tabs > .tab .badge { border: 0; background: color-mix(in oklab, var(--color-primary) 15%, transparent); color: inherit; }
+.app-tabs > .tab:is(.tab-active, [aria-selected="true"], :has(input:checked)) .badge { background: var(--color-primary-content); color: var(--color-primary); }
+.app-tabs > .tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.app-tabs > .tab-content { margin-top: 0.5rem; border: 1px solid var(--color-base-300); border-radius: var(--radius-box); }
+
+/* Audit page: thin stage line under the title, and a row of small number boxes. */
+.stage-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.stage-line li { color: color-mix(in oklab, var(--color-base-content) 50%, transparent); }
+.stage-line li.is-done { color: var(--color-primary); font-weight: 700; }
+.stage-line li + li::before { content: "›"; margin-right: 0.25rem; color: color-mix(in oklab, var(--color-base-content) 40%, transparent); font-weight: 400; }
+.mini-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.mini-stat {
+  flex: 1 1 7.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  cursor: default;
+}
+.mini-stat-title { font-size: 13px; color: color-mix(in oklab, var(--color-base-content) 65%, transparent); }
+.mini-stat-value { font-size: 1.15rem; font-weight: 700; white-space: nowrap; }
+.mini-stat-desc { font-size: 12px; font-weight: 500; color: color-mix(in oklab, var(--color-base-content) 60%, transparent); }
+
+/* Company logo in the blue top bar: on a white tile so dark logos stay visible. */
+.app-header .company-logo { background: #fff; }
+.app-header .drawer-side { color: var(--color-base-content); }

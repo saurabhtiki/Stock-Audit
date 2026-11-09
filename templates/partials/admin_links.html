@@ -1,0 +1,7 @@
+{# Admin pages, used in the wide top bar's Admin menu and in the phone side menu. #}
+<li><a href="{% url 'core:company_list' %}" title="Companies of the group, with logo and address">Companies</a></li>
+<li><a href="{% url 'core:branch_list' %}" title="Branches (stores) of each company">Branches</a></li>
+<li><a href="{% url 'core:department_list' %}" title="Departments users belong to">Departments</a></li>
+<li><a href="{% url 'accounts:user_list' %}" title="Users, their companies, roles and rights">Users</a></li>
+<li><a href="{% url 'core:activity_log' %}" title="Who changed what, and when">Activity log</a></li>
+<li><a href="{% url 'core:backup' %}" title="Download a backup zip of the database and media">Backup</a></li>

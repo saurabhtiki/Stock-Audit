@@ -6,11 +6,11 @@
 {% block content %}
 <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li>{{ audit }}</li></ul></div>
 
-<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
-  <div>
+<div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0">
     <h1 class="text-2xl font-bold">{{ audit.title }} {% include "audits/partials/stage_badge.html" %}</h1>
     <p class="text-base-content/70">{{ audit.branch }} · {{ audit.get_audit_type_display }} · audit date {{ audit.audit_date|date:"d M Y" }} · ERP stock as on {{ audit.stock_as_on|date:"d M Y" }}</p>
-    <p class="text-sm text-base-content/60">Created by {{ audit.created_by.full_name }} on {{ audit.created_at|date:"d M Y H:i" }}</p>
+    {% include "audits/partials/audit_progress.html" %}
   </div>
   <div class="flex flex-wrap gap-2">
     {% if can_edit %}<span class="tooltip tooltip-bottom" data-tip="Change title, dates or type (only while ERP Draft)"><a href="{% url 'audits:audit_edit' audit.pk %}" class="btn btn-outline btn-primary">Edit</a></span>{% endif %}
@@ -38,43 +38,21 @@
 </div>
 
 {% if audit.stage == "cancelled" %}
-  <div role="alert" class="alert alert-soft alert-error mb-4">
+  <div role="alert" class="alert alert-soft alert-error mb-3">
     <span>Cancelled by {{ audit.cancelled_by.full_name }} on {{ audit.cancelled_at|date:"d M Y H:i" }}. Reason: {{ audit.cancel_reason }}</span>
   </div>
-{% else %}
-  <ul class="steps mb-4 w-full">
-    {% with s=audit.stage %}
-    <li class="step step-primary">ERP Draft</li>
-    <li class="step {% if s == 'erp_frozen' or s == 'checking_done' or s == 'locked' %}step-primary{% endif %}">ERP Frozen</li>
-    <li class="step {% if s == 'checking_done' or s == 'locked' %}step-primary{% endif %}">Checking Done</li>
-    <li class="step {% if s == 'locked' %}step-primary{% endif %}">Locked</li>
-    {% endwith %}
-  </ul>
 {% endif %}
 
-<div class="stats stats-vertical sm:stats-horizontal mb-4 w-full bg-base-100">
-  <div class="stat"><div class="stat-title">ERP lines</div><div class="stat-value text-2xl">{{ totals.count|intcomma }}</div></div>
-  <div class="stat"><div class="stat-title">Total ERP value</div><div class="stat-value text-2xl">{{ totals.value|default:0|floatformat:2|intcomma }}</div></div>
-  <div class="stat">
-    <div class="stat-title">Tolerance</div>
-    <div class="stat-value text-2xl">{% if audit.frozen_at %}{{ audit.qty_tolerance|floatformat:"-3" }} qty{% if audit.pct_tolerance is not None %} / {{ audit.pct_tolerance|floatformat:"-2" }} %{% endif %}{% else %}—{% endif %}</div>
-    <div class="stat-desc">{% if audit.frozen_at %}Frozen by {{ audit.frozen_by.full_name }}, {{ audit.frozen_at|date:"d M Y H:i" }}{% else %}Set when ERP stock is frozen{% endif %}</div>
+{# All the numbers in one row of small boxes; the count boxes reload themselves after each saved count. #}
+<div class="mini-stats mb-4" aria-label="Audit numbers">
+  <div class="mini-stat" title="Lines in the ERP file in use"><div class="mini-stat-title">ERP lines</div><div class="mini-stat-value">{{ totals.count|intcomma }}</div></div>
+  <div class="mini-stat" title="ERP Qty × rate, added up over all lines"><div class="mini-stat-title">ERP value</div><div class="mini-stat-value">{{ totals.value|default:0|floatformat:2|intcomma }}</div></div>
+  <div class="mini-stat" title="{% if audit.frozen_at %}Frozen by {{ audit.frozen_by.full_name }}, {{ audit.frozen_at|date:'d M Y H:i' }}. A variance up to this size counts as OK.{% else %}Set when ERP stock is frozen{% endif %}">
+    <div class="mini-stat-title">Tolerance</div>
+    <div class="mini-stat-value">{% if audit.frozen_at %}{{ audit.qty_tolerance|floatformat:"-3" }} qty{% if audit.pct_tolerance is not None %} / {{ audit.pct_tolerance|floatformat:"-2" }} %{% endif %}{% else %}—{% endif %}</div>
   </div>
+  {% if summary %}{% include "audits/partials/count_stats.html" %}{% endif %}
 </div>
-
-{% if audit.checking_done_at %}
-  <div role="alert" class="alert alert-soft alert-info mb-4">
-    <span>Checking Done by {{ audit.checking_done_by.full_name }} on {{ audit.checking_done_at|date:"d M Y H:i" }}. Counts are fixed; remarks can still be changed until the audit is Locked.</span>
-  </div>
-{% endif %}
-
-{% if audit.locked_at %}
-  <div role="alert" class="alert alert-soft alert-warning mb-4">
-    <span>Locked by {{ audit.locked_by.full_name }} on {{ audit.locked_at|date:"d M Y H:i" }}. Remarks, media and Closed queries are frozen; open queries still carry forward.{% if not can_reopen %} Only Admin can reopen it.{% endif %}</span>
-  </div>
-{% endif %}
-
-{% if summary %}{% include "audits/partials/count_stats.html" %}{% endif %}
 
 {% if can_count %}
   <div class="card mb-4 bg-base-100">
@@ -115,7 +93,7 @@
 {% endif %}
 
 {# Tabs: plain radio inputs, no JS. htmx swaps inside a tab keep that tab open. #}
-<div class="tabs tabs-lift mb-6">
+<div class="tabs app-tabs mb-6">
   <label class="tab gap-2" title="{% if counting_view %}Every ERP line with its count, variance and remarks{% else %}The ERP stock lines of this audit{% endif %}">
     <input type="radio" name="audit_tabs" checked aria-label="{% if counting_view %}Lines and counts{% else %}ERP lines{% endif %}">
     {% if counting_view %}Lines and counts{% else %}ERP lines{% endif %}

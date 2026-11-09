@@ -6,7 +6,7 @@
   <div class="breadcrumbs text-sm"><ul><li><a href="{% url 'audits:audit_list' %}">Audits</a></li><li><a href="{% url 'audits:audit_detail' audit.pk %}">{{ audit }}</a></li><li>Checking Done</li></ul></div>
   <h1 class="mb-4 text-2xl font-bold">Checking Done</h1>
 
-  {% include "audits/partials/count_stats.html" %}
+  <div class="mini-stats mb-4">{% include "audits/partials/count_stats.html" %}</div>
 
   <div class="card bg-base-100">
     <form method="post" class="card-body gap-3" novalidate>

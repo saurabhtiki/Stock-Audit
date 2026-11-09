@@ -1,73 +1,112 @@
-<header class="app-header">
-  <nav class="navbar mx-auto max-w-6xl gap-2 px-4">
-    <div class="navbar-start gap-2">
-      <a href="{% url 'core:home' %}" class="text-lg font-bold">{{ app_name }}</a>
-      {% if app_env != "production" %}
-        <span class="tooltip tooltip-bottom" data-tip="Not the live system. Data here is for {{ app_env }} only.">
-          <span class="badge badge-sm badge-warning">{{ app_env }}</span>
-        </span>
-      {% endif %}
-    </div>
+{% comment %}
+  Top bar. Wide screens (lg, 1024 px and up): every link in the bar, as before.
+  Narrower screens: logo, company and a ☰ button that opens a side menu (DaisyUI drawer)
+  with the same links (partials/nav_links.html and admin_links.html are shared by both).
+{% endcomment %}
+<header class="app-header drawer drawer-end">
+  <input id="nav-drawer" type="checkbox" class="drawer-toggle" aria-label="Open or close the menu">
+  <div class="drawer-content">
+    <nav class="navbar mx-auto max-w-6xl gap-2 px-4">
+      <div class="navbar-start min-w-0 gap-2">
+        <a href="{% url 'core:home' %}" class="flex min-w-0 items-center gap-2 text-lg font-bold" title="Home">
+          {% if current_company.logo %}
+            <img src="{{ current_company.logo.url }}" alt="{{ current_company.name }} logo" class="company-logo h-8 w-auto max-w-24 shrink-0 rounded bg-white object-contain p-0.5">
+          {% endif %}
+          <span class="truncate">{{ app_name }}</span>
+        </a>
+        {% if app_env != "production" %}
+          <span class="tooltip tooltip-bottom" data-tip="Not the live system. Data here is for {{ app_env }} only.">
+            <span class="badge badge-sm badge-warning">{{ app_env }}</span>
+          </span>
+        {% endif %}
+      </div>
 
-    <div class="navbar-center">
+      <div class="navbar-center hidden lg:flex">
+        {% if user_companies|length > 1 %}
+          <form method="post" action="{% url 'core:switch_company' %}" class="tooltip tooltip-bottom" data-tip="Switch the company you are working in">
+            {% csrf_token %}
+            <label class="sr-only" for="company-switcher">Company</label>
+            <select id="company-switcher" name="company_id" class="select select-sm w-56" onchange="this.form.submit()">
+              {% for company in user_companies %}
+                <option value="{{ company.pk }}" {% if company.pk == current_company.pk %}selected{% endif %}>{{ company.name }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        {% elif current_company %}
+          <span class="font-bold">{{ current_company.name }}</span>
+        {% endif %}
+      </div>
+
+      <div class="navbar-end gap-1">
+        {# Wide screens: links in the bar. #}
+        <div class="hidden items-center gap-1 lg:flex">
+          {% include "partials/nav_links.html" with link_class="btn btn-ghost btn-sm" as_menu=False %}
+          {% if user.is_admin %}
+            <details class="dropdown dropdown-end">
+              <summary class="btn btn-ghost btn-sm">Admin</summary>
+              <ul class="menu dropdown-content z-10 mt-2 w-48 rounded-box bg-base-100 p-2 shadow">
+                {% include "partials/admin_links.html" %}
+              </ul>
+            </details>
+          {% endif %}
+          {% include "partials/theme_toggle.html" %}
+          <details class="dropdown dropdown-end">
+            <summary class="btn btn-ghost btn-sm gap-2">
+              {% include "partials/avatar.html" with person=user size="w-6" %}
+              {{ user.full_name|default:user.username }}
+            </summary>
+            <ul class="menu dropdown-content z-10 mt-2 w-52 rounded-box bg-base-100 p-2 shadow">
+              {% if current_role %}<li class="menu-title">{{ current_role }}{% if current_company %} in {{ current_company.name }}{% endif %}</li>{% endif %}
+              {% include "partials/user_links.html" %}
+            </ul>
+          </details>
+        </div>
+        {# Narrow screens: company name and the ☰ button. #}
+        <span class="max-w-36 truncate text-sm font-bold sm:max-w-60 lg:hidden" title="{{ current_company.name }}">{{ current_company.name }}</span>
+        <label for="nav-drawer" class="btn btn-ghost btn-sm btn-square lg:hidden" title="Open the menu" aria-label="Open the menu">
+          <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </label>
+      </div>
+    </nav>
+    <div class="tape-stripe" aria-hidden="true"></div>
+  </div>
+
+  {# Phone / tablet side menu. Clicking the dark area beside it closes it. #}
+  <div class="drawer-side z-50 lg:hidden">
+    <label for="nav-drawer" class="drawer-overlay" aria-label="Close the menu"></label>
+    <div class="flex min-h-full w-72 max-w-[85vw] flex-col bg-base-100 text-base-content">
+      <div class="flex items-center gap-2 border-b border-base-300 p-4">
+        {% include "partials/avatar.html" with person=user size="w-8" %}
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-bold">{{ user.full_name|default:user.username }}</p>
+          {% if current_role %}<p class="truncate text-sm text-base-content/70">{{ current_role }}{% if current_company %} in {{ current_company.name }}{% endif %}</p>{% endif %}
+        </div>
+        <label for="nav-drawer" class="btn btn-ghost btn-sm btn-square" title="Close the menu" aria-label="Close the menu">✕</label>
+      </div>
       {% if user_companies|length > 1 %}
-        <form method="post" action="{% url 'core:switch_company' %}" class="tooltip tooltip-bottom" data-tip="Switch the company you are working in">
+        <form method="post" action="{% url 'core:switch_company' %}" class="border-b border-base-300 p-4">
           {% csrf_token %}
-          <label class="sr-only" for="company-switcher">Company</label>
-          <select id="company-switcher" name="company_id" class="select select-sm w-40 sm:w-56" onchange="this.form.submit()">
+          <label class="text-sm text-base-content/70" for="company-switcher-phone">Company</label>
+          <select id="company-switcher-phone" name="company_id" class="select select-sm mt-1 w-full" onchange="this.form.submit()" title="Switch the company you are working in">
             {% for company in user_companies %}
               <option value="{{ company.pk }}" {% if company.pk == current_company.pk %}selected{% endif %}>{{ company.name }}</option>
             {% endfor %}
           </select>
         </form>
-      {% elif current_company %}
-        <span class="font-bold">{{ current_company.name }}</span>
       {% endif %}
+      <ul class="menu w-full p-2" aria-label="Main menu">
+        {% include "partials/nav_links.html" with link_class="" as_menu=True %}
+        {% if user.is_admin %}
+          <li class="menu-title">Admin</li>
+          {% include "partials/admin_links.html" %}
+        {% endif %}
+        <li class="menu-title">Me</li>
+        {% include "partials/user_links.html" %}
+      </ul>
+      <div class="mt-auto flex items-center gap-2 border-t border-base-300 p-4 text-sm">
+        {% include "partials/theme_toggle.html" with toggle_id="theme-toggle-phone" %} Light / dark
+      </div>
     </div>
-
-    <div class="navbar-end gap-1">
-      {% if current_company %}
-        <a href="{% url 'audits:dashboard' %}" class="btn btn-ghost btn-sm" title="Charts and summaries: audit status, open queries, variance, repeat items, trends">Dashboard</a>
-        <a href="{% url 'audits:audit_list' %}" class="btn btn-ghost btn-sm" title="Audits of your Branches">Audits</a>
-        <a href="{% url 'audits:query_list' %}" class="btn btn-ghost btn-sm" title="Queries raised for Excess / Shortage lines: replies and actions">Queries</a>
-        <a href="{% url 'audits:item_list' %}" class="btn btn-ghost btn-sm" title="Item list of this company">Items</a>
-      {% endif %}
-      {% if user.is_admin %}
-        <details class="dropdown dropdown-end">
-          <summary class="btn btn-ghost btn-sm">Admin</summary>
-          <ul class="menu dropdown-content z-10 mt-2 w-48 rounded-box bg-base-100 p-2 shadow">
-            <li><a href="{% url 'core:company_list' %}">Companies</a></li>
-            <li><a href="{% url 'core:branch_list' %}">Branches</a></li>
-            <li><a href="{% url 'core:department_list' %}">Departments</a></li>
-            <li><a href="{% url 'accounts:user_list' %}">Users</a></li>
-            <li><a href="{% url 'core:activity_log' %}">Activity log</a></li>
-            <li><a href="{% url 'core:backup' %}" title="Download a backup zip of the database and media">Backup</a></li>
-          </ul>
-        </details>
-      {% endif %}
-      {% include "partials/theme_toggle.html" %}
-      <details class="dropdown dropdown-end">
-        <summary class="btn btn-ghost btn-sm gap-2">
-          {% include "partials/avatar.html" with person=user size="w-6" %}
-          {{ user.full_name|default:user.username }}
-        </summary>
-        <ul class="menu dropdown-content z-10 mt-2 w-52 rounded-box bg-base-100 p-2 shadow">
-          {% if current_role %}<li class="menu-title">{{ current_role }}{% if current_company %} in {{ current_company.name }}{% endif %}</li>{% endif %}
-          <li><a href="{% url 'accounts:profile' %}">My profile and photo</a></li>
-          <li><a href="{% url 'accounts:password_change' %}">Change password</a></li>
-          <li>
-            {# The button itself is the menu row, so a click anywhere on the row logs out. #}
-            <button type="submit" form="logout-form" title="Log out and go to the login page"
-                    x-data="{ busy: false }" @pageshow.window="busy = false" :disabled="busy" :aria-busy="busy"
-                    @click.prevent="if (!busy) { busy = true; $el.form.requestSubmit() }">
-              <span x-show="!busy">Log out</span>
-              <span x-show="busy" x-cloak class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span>Logging out…</span>
-            </button>
-          </li>
-        </ul>
-      </details>
-      <form id="logout-form" method="post" action="{% url 'accounts:logout' %}" class="hidden">{% csrf_token %}</form>
-    </div>
-  </nav>
-  <div class="tape-stripe" aria-hidden="true"></div>
+  </div>
+  <form id="logout-form" method="post" action="{% url 'accounts:logout' %}" class="hidden">{% csrf_token %}</form>
 </header>

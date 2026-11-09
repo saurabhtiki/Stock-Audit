@@ -7,7 +7,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from audits import dashboard_views, dashboards
+from audits import dashboard_views
 from audits.models import Action
 
 from .conftest import client_for
@@ -155,15 +155,6 @@ def test_variance_tab_has_expander_urls(admin_client, two_audits):
     assert 'hx-trigger="click once"' in body
 
 
-def test_repeat_detail_shows_each_audit(admin_client, two_audits, north):  # noqa: F811
-    rows = dashboards.repeat_items(filters_for([north], today=TODAY))
-    assert rows[0]["item_code"] == "X1" and rows[0]["streak"] == 2
-    body = detail(
-        admin_client, "repeat", row_branch=north.pk, item=rows[0]["item_id"]
-    ).content.decode()
-    assert "First" in body and "Second" in body and "Shortage" in body
-
-
 def test_trend_detail_lists_audit_items(admin_client, two_audits):
     _first, second = two_audits
     body = detail(admin_client, "trend", audit=second.pk).content.decode()
@@ -184,7 +175,8 @@ def test_drilldown_refuses_other_branch(viewer, two_audits, south, north):  # no
 
 def test_drilldown_bad_values(admin_client, north):  # noqa: F811
     assert detail(admin_client, "variance", row_branch=north.pk, month="soon").status_code == 400
-    assert detail(admin_client, "repeat", row_branch=north.pk).status_code == 400
+    # Repeat items have no ▸ any more (Phase 8): the item link opens its query history.
+    assert detail(admin_client, "repeat", row_branch=north.pk).status_code == 404
     assert detail(admin_client, "nope").status_code == 404
 
 

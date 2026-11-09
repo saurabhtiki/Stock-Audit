@@ -1,0 +1,27 @@
+{% comment %}
+  One thin line under the audit title: the 4 stages (done ones in blue) and who closed counting /
+  locked it. The long explanations sit in tooltips. Needs `audit` and `can_reopen`.
+{% endcomment %}
+<div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+  {% if audit.stage != "cancelled" %}
+    {% with s=audit.stage %}
+    <ol class="stage-line" aria-label="Audit stages">
+      <li class="is-done">ERP Draft</li>
+      <li class="{% if s == 'erp_frozen' or s == 'checking_done' or s == 'locked' %}is-done{% endif %}">ERP Frozen</li>
+      <li class="{% if s == 'checking_done' or s == 'locked' %}is-done{% endif %}">Checking Done</li>
+      <li class="{% if s == 'locked' %}is-done{% endif %}">Locked</li>
+    </ol>
+    {% endwith %}
+  {% endif %}
+  {% if audit.checking_done_at %}
+    <span class="tooltip tooltip-bottom" data-tip="Counts are fixed; remarks can still be changed until the audit is Locked.">
+      <span class="text-info">✔ Checking Done by {{ audit.checking_done_by.full_name }}, {{ audit.checking_done_at|date:"d M Y H:i" }} ⓘ</span>
+    </span>
+  {% endif %}
+  {% if audit.locked_at %}
+    <span class="tooltip tooltip-bottom" data-tip="Remarks, media and Closed queries are frozen; open queries still carry forward.{% if not can_reopen %} Only Admin can reopen it.{% endif %}">
+      <span class="text-warning">🔒 Locked by {{ audit.locked_by.full_name }}, {{ audit.locked_at|date:"d M Y H:i" }} ⓘ</span>
+    </span>
+  {% endif %}
+  <span class="text-base-content/60">Created by {{ audit.created_by.full_name }}, {{ audit.created_at|date:"d M Y H:i" }}</span>
+</div>

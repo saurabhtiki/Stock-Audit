@@ -2,29 +2,6 @@
 {# Rows behind one dashboard summary row, loaded into the ▸ expander. Built by dashboard_views.dashboard_detail. #}
 {% if problem %}
   <div role="alert" class="alert alert-soft alert-warning py-2 text-sm"><span>{{ problem }}</span></div>
-{% elif kind == "repeat" %}
-  <p class="mb-1 text-xs text-base-content/70">Every counted audit of this Branch in the chosen months, oldest first. Red / green rows are the Excess / Shortage hits; the others break the run.</p>
-  <div class="overflow-x-auto">
-    <table class="table table-xs">
-      <thead><tr><th>Audit</th><th>Date</th><th>Count status</th><th class="text-right">Variance qty</th><th class="text-right">Variance value</th><th>Query</th></tr></thead>
-      <tbody>
-        {% for run in runs %}
-          {% with line=run.line %}
-          <tr class="{% if line.count_status == 'shortage' %}bg-error/10{% elif line.count_status == 'excess' %}bg-success/10{% endif %}">
-            <td><a class="link link-primary" href="{% url 'audits:audit_detail' run.audit.pk %}" title="Open this audit">{{ run.audit.title }}</a></td>
-            <td>{{ run.audit.audit_date|date:"d M Y" }}</td>
-            <td>{% if line %}{{ line.get_count_status_display }}{% else %}<span class="text-base-content/50" title="The item was not in this audit's ERP stock">Not in audit</span>{% endif %}</td>
-            <td class="text-right">{% if line.variance_qty is not None %}{{ line.variance_qty|floatformat:"-3" }}{% else %}–{% endif %}</td>
-            <td class="text-right font-bold">{% if line.variance_value is not None %}{{ line.variance_value|floatformat:2|intcomma }}{% else %}–{% endif %}</td>
-            <td>{% if line.query %}<a class="link link-primary" href="{% url 'audits:query_detail' line.query.pk %}" title="Open this query">{% include "audits/partials/query_status_badge.html" with status=line.query.status %}</a>{% else %}–{% endif %}</td>
-          </tr>
-          {% endwith %}
-        {% empty %}
-          <tr><td colspan="6" class="text-center text-base-content/70">No counted audits for this Branch in these months.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
 {% else %}
   {% if table.has_any_rows %}
     <p class="mb-1 text-xs text-base-content/70">Every item with a variance, biggest value first. Small ones inside the tolerance are included.</p>

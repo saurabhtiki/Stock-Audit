@@ -49,7 +49,7 @@
   <div role="alert" class="alert alert-soft alert-warning mb-2 py-2 text-sm"><span>{{ error }}</span></div>
 {% endfor %}
 
-<div role="tablist" class="tabs tabs-box mb-3 flex-nowrap overflow-x-auto">
+<div role="tablist" class="tabs app-tabs mb-3 flex-nowrap overflow-x-auto">
   {% for item in tabs %}
     <a role="tab" href="{{ item.url }}" hx-get="{{ item.url }}" hx-target="#dashboard" hx-push-url="true"
        class="tab whitespace-nowrap {% if item.name == tab %}tab-active font-bold{% endif %}" title="{{ item.tip }}"

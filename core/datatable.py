@@ -129,8 +129,12 @@ class DataTable:
         keep=(),
         default_per_page=PAGE_SIZES[0],
         push_url=True,
+        csv_params=(),
     ):
         self.params = params
+        # Extra URL pairs on the CSV link only, e.g. ("part", "overdue") when one page has
+        # several downloads and the view must tell them apart.
+        self.csv_params = tuple(csv_params)
         self.default_per_page = default_per_page
         # False for a table inside another page (e.g. a dashboard expander): its clicks
         # must not change the browser address, or a refresh would show only the table.
@@ -302,7 +306,7 @@ class DataTable:
 
     @property
     def csv_url(self) -> str:
-        return self.url(add=[("export", "csv")])
+        return self.url(add=[*self.csv_params, ("export", "csv")])
 
     @property
     def search_hidden(self):
@@ -345,9 +349,8 @@ class DataTable:
             )
         return cells
 
-    def _options(self, column) -> list[dict]:
-        """Tick-list values with how many rows each would show, given the other filters."""
-        picked = set(self._picked(column))
+    def _value_counts(self, column) -> dict:
+        """{value key: rows with that value}, given every filter except this column's."""
         counts = (
             self._filtered_except(skip=column.name)
             .order_by()
@@ -357,9 +360,14 @@ class DataTable:
         )
         merged: dict = {}
         for row in counts:
-            value = row[column.name]
-            key = BLANK if value in (None, "") else str(value)
+            key = _option_key(row[column.name])
             merged[key] = merged.get(key, 0) + row["row_count"]
+        return merged
+
+    def _options(self, column) -> list[dict]:
+        """Tick-list values with how many rows each would show, given the other filters."""
+        picked = set(self._picked(column))
+        merged = self._value_counts(column)
         for key in picked - merged.keys():
             merged[key] = 0  # keep a ticked value visible even when nothing matches it now
         options = [
@@ -483,7 +491,7 @@ class DataTable:
         def lines():
             yield "﻿"  # lets Excel read accents and ₹ correctly
             yield writer.writerow([column.label for column in columns])
-            for row in self.ordered.iterator(chunk_size=CSV_CHUNK):
+            for row in self._all_rows():
                 yield writer.writerow([self._csv_cell(column, row) for column in columns])
 
         name = filename or f"{self.table_id}_{timezone.localdate().isoformat()}.csv"
@@ -491,15 +499,106 @@ class DataTable:
         response["Content-Disposition"] = f'attachment; filename="{name}"'
         return response
 
+    def _all_rows(self):
+        """Every matching row in order, read from the database in chunks."""
+        return self.ordered.iterator(chunk_size=CSV_CHUNK)
+
     @staticmethod
-    def _csv_cell(column, row) -> str:
+    def _value(row, name: str):
+        return getattr(row, name)
+
+    def _csv_cell(self, column, row) -> str:
         if column.csv_value:
             return _csv_text(column.csv_value(row))
-        value = getattr(row, column.name)
+        value = self._value(row, column.name)
         key = str(value) if isinstance(value, bool) else value  # Yes/No columns use "True" keys
         if column.choices and key in column.choices:
             return _csv_text(str(column.choices[key]))
         return _csv_text(value)
+
+
+def _option_key(value) -> str:
+    """Tick-list key of a cell value: BLANK for an empty cell, else the value as text."""
+    return BLANK if value in (None, "") else str(value)
+
+
+class RowsTable(DataTable):
+    """The same table (search, column filters, sort, pages, CSV, same templates) over rows
+    worked out in Python, e.g. dashboard numbers that SQL can't produce. `rows` is a list of
+    dicts, already in their normal order; columns name dict keys. Fine for a few thousand rows.
+    """
+
+    def _condition_for(self, column):
+        """A test function `row -> bool` for this column's filter, or None when it's off."""
+        name = column.name
+        if column.type == TEXT:
+            text = self.params.get(name, "").strip().lower()
+            if not text:
+                return None
+            return lambda row: text in str(row.get(name) or "").lower()
+        if column.type == CHOICE:
+            picked = set(self._picked(column))
+            if not picked:
+                return None
+            return lambda row: _option_key(row.get(name)) in picked
+        bounds = []
+        for suffix in ("_min", "_max"):
+            raw = self.params.get(name + suffix, "").strip()
+            bounds.append(self._parse(column, raw) if raw else None)
+        low, high = bounds
+        if low is None and high is None:
+            return None
+        return lambda row: (
+            row.get(name) is not None
+            and ((low is None or row[name] >= low) and (high is None or row[name] <= high))
+        )
+
+    def _field(self, name: str):
+        return None
+
+    def _filtered_except(self, skip=None):
+        tests = [test for name, test in self.conditions.items() if name != skip]
+        if self.search:
+            needle = self.search.lower()
+            tests.append(
+                lambda row: any(
+                    needle in str(row.get(field) or "").lower() for field in self.search_fields
+                )
+            )
+        return [row for row in self.base_queryset if all(test(row) for test in tests)]
+
+    @cached_property
+    def ordered(self):
+        if not self.sort:
+            return self.filtered
+        name = self.sort.lstrip("-")
+
+        def sort_key(row):
+            value = row.get(name)
+            return value.lower() if isinstance(value, str) else value
+
+        filled = [row for row in self.filtered if row.get(name) is not None]
+        empty = [row for row in self.filtered if row.get(name) is None]
+        # Empty cells always last, like the database table (nulls last).
+        return sorted(filled, key=sort_key, reverse=self.sort.startswith("-")) + empty
+
+    @cached_property
+    def has_any_rows(self) -> bool:
+        return bool(self.base_queryset)
+
+    def _value_counts(self, column) -> dict:
+        merged: dict = {}
+        for row in self._filtered_except(skip=column.name):
+            key = _option_key(row.get(column.name))
+            merged[key] = merged.get(key, 0) + 1
+        return merged
+
+    def _all_rows(self):
+        return self.ordered
+
+    @staticmethod
+    def _value(row, name: str):
+        return row.get(name)
 
 
 def rows_csv_response(filename: str, headings: list[str], rows) -> StreamingHttpResponse:

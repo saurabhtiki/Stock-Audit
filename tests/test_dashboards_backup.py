@@ -231,8 +231,16 @@ def test_overdue_actions(admin_user, branches, north):
         status=Action.Status.VERIFIED,
         **common,
     )
+    Action.objects.create(
+        description="done", due_date=TODAY - timedelta(days=1), status=Action.Status.DONE, **common
+    )
     rows = dashboards.overdue_actions(filters_for(branches), today=TODAY)
-    assert [(row["description"], row["days_late"]) for row in rows] == [("late", 3)]
+    # Done but not Verified stays overdue (it waits for someone to verify it).
+    assert [(row.description, row.days_late.days, row.status) for row in rows] == [
+        ("late", 3, "open"),
+        ("done", 1, "done"),
+    ]
+    assert rows[0].branch_code == "N1" and rows[0].item_code == "A1"
 
 
 def test_queries_tab_page_and_csv(admin_client, admin_user, north):
@@ -315,7 +323,7 @@ def test_repeat_items_streaks(admin_user, branches, north, south):
     # South: A1 flagged once only; North's A1 must not join with it.
     make_audit(south, "S1", date(2026, 8, 1), admin_user, lines=[("A1", 10, 0, 1)])
     rows = dashboards.repeat_items(filters_for(branches))
-    assert [(r["branch"], r["item_code"], r["streak"]) for r in rows] == [("N1", "A1", 3)]
+    assert [(r["branch_code"], r["item_code"], r["streak"]) for r in rows] == [("N1", "A1", 3)]
     assert rows[0]["total_value"] == Decimal(-25)
     last_query = Query.objects.get(audit__title="N3", line__item_code="A1")
     assert rows[0]["query_id"] == last_query.pk

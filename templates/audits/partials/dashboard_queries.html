@@ -25,33 +25,10 @@
   <div class="card card-sm bg-base-100">
     <div class="card-body">
       <div class="flex items-center gap-2">
-        <h2 class="card-title flex-1">Overdue actions <span class="badge {% if overdue %}badge-error{% else %}badge-ghost{% endif %}">{{ overdue|length }}</span></h2>
-        {% with csv_overdue=csv_url|add:"&part=overdue" %}{% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_overdue csv_tip="Download the overdue actions as CSV" %}{% endwith %}
+        <h2 class="card-title flex-1">Overdue actions <span class="badge {% if table.page.paginator.count %}badge-error{% else %}badge-ghost{% endif %}">{{ table.page.paginator.count }}</span></h2>
       </div>
-      <p class="text-sm text-base-content/70">Due date passed and not yet Verified.</p>
-      {% if overdue %}
-        <div class="overflow-x-auto">
-          <table class="table table-sm table-zebra">
-            <thead><tr><th>Branch</th><th>Audit</th><th>Item No</th><th>Action</th><th>Owner</th><th>Status</th><th>Due</th><th class="text-right">Days late</th></tr></thead>
-            <tbody>
-              {% for row in overdue %}
-                <tr>
-                  <td class="font-bold">{{ row.branch }}</td>
-                  <td>{{ row.audit }}</td>
-                  <td><a class="link link-primary font-bold" href="{% url 'audits:query_detail' row.query_id %}" title="Open the query of this action">{{ row.item_code }}</a></td>
-                  <td class="max-w-xs truncate" title="{{ row.description }}">{{ row.description }}</td>
-                  <td>{{ row.owner }}</td>
-                  <td>{{ row.status }}</td>
-                  <td>{{ row.due_date|date:"d M Y" }}</td>
-                  <td class="text-right font-bold text-error">{{ row.days_late }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <div role="alert" class="alert alert-soft alert-success"><span>No overdue actions.</span></div>
-      {% endif %}
+      <p class="text-sm text-base-content/70">Due date passed and not yet Verified. “Done – waiting to verify” means the owner finished it but nobody has checked it yet; click “Open” to hide those.</p>
+      {% include "audits/partials/dashboard_overdue_table.html" %}
     </div>
   </div>
 </div>

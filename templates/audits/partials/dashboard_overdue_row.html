@@ -1,0 +1,16 @@
+<tr>
+  <td class="dt-sticky font-bold">{{ row.branch_code }}</td>
+  <td>{{ row.audit_title }}</td>
+  <td><a class="link link-primary font-bold" href="{% url 'audits:query_detail' row.query_id %}" title="Open the query of this action">{{ row.item_code }}</a></td>
+  <td class="max-w-xs truncate" title="{{ row.description }}">{{ row.description }}</td>
+  <td>{{ row.owner_name }}</td>
+  <td>
+    {% if row.status == "done" %}
+      <span class="tooltip" data-tip="The owner marked it Done, but nobody has verified it yet. It stays here until it is Verified."><span class="badge badge-sm badge-warning whitespace-nowrap">Done – waiting to verify</span></span>
+    {% else %}
+      <span class="tooltip" data-tip="Not done yet, and the due date has passed"><span class="badge badge-sm badge-error">Open</span></span>
+    {% endif %}
+  </td>
+  <td>{{ row.due_date|date:"d M Y" }}</td>
+  <td class="text-right font-bold text-error">{{ row.days_late.days }}</td>
+</tr>

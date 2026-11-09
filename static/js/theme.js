@@ -27,6 +27,8 @@
         this.dark = !this.dark;
         var theme = this.dark ? DARK : LIGHT;
         apply(theme);
+        // Tell the other switch (top bar / phone menu) so its icon follows.
+        window.dispatchEvent(new CustomEvent("theme-changed", { detail: { dark: this.dark } }));
         try {
           localStorage.setItem(KEY, theme);
         } catch (error) {
