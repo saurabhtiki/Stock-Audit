@@ -66,3 +66,8 @@ def test_query_page_uses_app_tabs(raised, boss):  # noqa: F811
 def test_home_has_no_branch_list(priya, manager):  # noqa: F811
     page = client_for(manager).get(reverse("core:home")).content.decode()
     assert "Your Branches" not in page and "Go to audits" in page
+
+
+def test_pdf_shortage_status_in_red(raised, locker):  # noqa: F811
+    text = pdf_of(locker, raised)
+    assert ".72549 .109804 .109804 rg" in text  # #b91c1c red text for "Shortage"

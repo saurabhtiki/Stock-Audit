@@ -697,6 +697,7 @@ New features, email alerts, changing who can do what, links from the PDF to the 
   and each action with owner, status, due date and **(overdue)**. A query whose line is in no table (e.g. a
   recount made it OK) goes in a short "Other queries" list. The Count summary gains "Queries — Not closed / Closed".
 - **Query page:** tabs use the shared `app-tabs` look (same as Audit page and Dashboard).
+- **PDF Status column** wider (no more "Shortag/e" split); Shortage printed in bold red.
 - **Home:** "Your Branches" list removed; "Go to audits" button stays, and the "No Branches open to you" warning
   still shows when a user has none.
 

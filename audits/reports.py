@@ -444,6 +444,14 @@ def _query_text(query, actions, latest_update) -> str:
     return f'<font color="{REMARK_GREY}">{text}</font>'
 
 
+def _status_cell(line) -> str:
+    """Count status for the PDF; Shortage in bold red so it stands out."""
+    text = _esc(line.get_count_status_display())
+    if line.count_status == AuditLine.Status.SHORTAGE:
+        return f'<font color="#b91c1c"><b>{text}</b></font>'
+    return text
+
+
 def _lines_table(headings, lines, make_cells, widths, styles, notes_by_line, right_cols=()):
     """A table of audit lines; each line's remarks and query sit in a full-width grey row right
     under it. `make_cells(line)` and `notes_by_line` hold Paragraph markup (already escaped)."""
@@ -685,9 +693,9 @@ def audit_pdf(audit: Audit, stockkeeper: str = "") -> bytes:
                     _qty(ln.physical_qty),
                     _qty(ln.variance_qty),
                     _num(ln.variance_value),
-                    ln.get_count_status_display(),
+                    _status_cell(ln),
                 ],
-                [w * width for w in (0.12, 0.32, 0.07, 0.1, 0.1, 0.1, 0.11, 0.08)],
+                [w * width for w in (0.12, 0.29, 0.07, 0.1, 0.1, 0.1, 0.11, 0.11)],
                 styles,
                 notes_by_line,
                 right_cols=(3, 4, 5, 6),
