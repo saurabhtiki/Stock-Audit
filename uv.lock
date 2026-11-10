@@ -311,8 +311,8 @@ wheels = [
 
 [[package]]
 name = "django-datatable"
-version = "0.3.0"
-source = { git = "https://github.com/saurabhtiki/django-datatable?rev=052f02c#052f02ce4339714f23070ed6127c0bfc09f6d198" }
+version = "0.3.1"
+source = { git = "https://github.com/saurabhtiki/django-datatable?rev=5fe177d#5fe177da45fb8bde05e33b90f6f1fd391a9edb77" }
 dependencies = [
     { name = "django" },
 ]
@@ -630,7 +630,7 @@ dev = [
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=25.1.0" },
     { name = "django", specifier = ">=5.2,<5.3" },
-    { name = "django-datatable", git = "https://github.com/saurabhtiki/django-datatable?rev=052f02c" },
+    { name = "django-datatable", git = "https://github.com/saurabhtiki/django-datatable?rev=5fe177d" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "pillow-heif", specifier = ">=1.8.1" },
