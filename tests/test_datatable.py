@@ -173,9 +173,9 @@ def test_text_sort_ignores_case(audit, lines):
 def test_page_size_and_page_past_the_end(audit):
     for number in range(60):
         add_line(audit, f"X{number:03}")
-    assert lines_table(audit).per_page == 25
+    assert lines_table(audit).per_page == 20
     assert lines_table(audit, "per_page=50").per_page == 50
-    assert lines_table(audit, "per_page=999").per_page == 25
+    assert lines_table(audit, "per_page=999").per_page == 20
     last = lines_table(audit, "page=99").page
     assert last.number == 3 and codes(lines_table(audit, "page=99"))[-1] == "X059"
     pager = lines_table(audit, "page=2").pager

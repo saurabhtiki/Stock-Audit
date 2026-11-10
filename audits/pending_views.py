@@ -179,7 +179,7 @@ def pending_section(request):
         table_id="pending-table",
         density_switch=True,
         column_toggle=True,
-        sticky_header=True,
+        border_toggle=True,
         default_sort=_default_sort(tab),
         search_fields=QUERY_SEARCH if tab.name in ("replies", "close") else ACTION_SEARCH,
         search_placeholder="Search item code, description or audit",

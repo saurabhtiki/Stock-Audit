@@ -39,4 +39,4 @@ extend-ignore = ["RUF012"]
 "config/settings/*.py" = ["F403", "F405"]
 
 [tool.uv.sources]
-django-datatable = { git = "https://github.com/saurabhtiki/django-datatable", rev = "984bedd" }
+django-datatable = { git = "https://github.com/saurabhtiki/django-datatable", rev = "052f02c" }

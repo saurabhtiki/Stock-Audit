@@ -92,7 +92,7 @@ def user_list(request):
         table_id="user-table",
         density_switch=True,
         column_toggle=True,
-        sticky_header=True,
+        border_toggle=True,
         default_sort=("username",),
         search_fields=("username", "full_name", "email"),
         search_placeholder="Search name, username or email",
