@@ -2,7 +2,7 @@
 <div id="audit-lines" hx-target="#audit-lines" hx-swap="outerHTML">
   {% if table.has_any_rows %}
     {% include "django_datatable/toolbar.html" %}
-    <div class="overflow-x-auto rounded-box bg-base-100">
+    <div class="dt-scroll overflow-x-auto rounded-box bg-base-100{% if table.sticky_header %} dt-scroll-sticky{% endif %}">
       <table class="table table-sm table-zebra data-table">
         <thead><tr>{% include "django_datatable/head_cells.html" %}</tr></thead>
         <tbody>

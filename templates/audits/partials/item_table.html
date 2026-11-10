@@ -2,7 +2,7 @@
      data-matching="{{ matching_new_count }}" data-filters="{{ table.filter_query }}" data-filtered="{{ table.active_count }}" x-init="tableLoaded($el)">
   {% if table.has_any_rows %}
     {% include "django_datatable/toolbar.html" %}
-    <div class="overflow-x-auto rounded-box bg-base-100">
+    <div class="dt-scroll overflow-x-auto rounded-box bg-base-100{% if table.sticky_header %} dt-scroll-sticky{% endif %}">
       <table class="table table-sm table-zebra data-table">
         <thead><tr>
           {% if can_manage %}<th class="dt-sticky dt-lead">{% if matching_new_count %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all New items on this page" title="Tick or untick all New items on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}

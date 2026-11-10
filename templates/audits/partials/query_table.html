@@ -3,7 +3,7 @@
      {% if can_bulk %}data-matching="{{ matching_count }}" data-filters="{{ table.filter_query }}" data-filtered="{{ table.active_count }}" x-init="tableLoaded($el)"{% endif %}>
   {% if table.has_any_rows %}
     {% include "django_datatable/toolbar.html" %}
-    <div class="overflow-x-auto rounded-box bg-base-100">
+    <div class="dt-scroll overflow-x-auto rounded-box bg-base-100{% if table.sticky_header %} dt-scroll-sticky{% endif %}">
       <table class="table table-sm table-zebra data-table">
         <thead><tr>
           {% if can_bulk %}<th class="dt-sticky dt-lead">{% if pickable_ids %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all open queries on this page" title="Tick or untick all open queries on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}
