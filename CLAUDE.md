@@ -21,6 +21,10 @@ Phase 8.1 done. Table moved into the reusable package `../django-datatable` (edi
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.
 
+# Reusable components
+- For any tabular data (filters, search, sort, pages, CSV) use the `django-datatable` package (`from django_datatable import DataTable, RowsTable, Column, table_response`). Do not hand-write tables.
+- It is installed from GitHub (saurabhtiki/django-datatable), pinned by `rev` in `pyproject.toml`; never from a local folder. Never edit a copy inside this app: change the package repo, push, then bump `rev` and run `uv lock --upgrade-package django-datatable && uv sync`. How to use it and its options (density_switch, column_toggle, sticky_header, ...): see the repo's `README.md`.
+
 # Coding conventions
 - Naming: snake_case for functions/variables, PascalCase for classes, descriptive names (no `df1`, `temp`, `x`)
 -specific, user-facing error messages — no bare `except:`
