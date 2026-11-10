@@ -11,10 +11,10 @@ from django.core.files.base import ContentFile
 from django.http import QueryDict
 from django.urls import reverse
 from django.utils import timezone
+from django_datatable import CHOICE, NUMBER, Column, RowsTable
 from PIL import Image
 
 from audits.models import Action, Attachment, AuditLine, Remark
-from core.datatable import CHOICE, NUMBER, Column, RowsTable
 
 from .conftest import client_for, make_user
 from .test_audits import audit, manager, priya  # noqa: F401
@@ -43,11 +43,6 @@ def give_logo(company):
 
 
 # ---------- 1. filter pop-up of the 1st column ----------
-
-
-def test_header_sticky_cell_sits_above_body_cells():
-    css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert ".data-table thead .dt-sticky { z-index: 3; }" in css
 
 
 # ---------- 2. logo and phone menu ----------

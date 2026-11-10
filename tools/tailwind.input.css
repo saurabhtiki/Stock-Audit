@@ -7,4 +7,5 @@
 @source "../accounts/**/*.py";
 @source "../audits/**/*.py";
 @source "../core/**/*.py";
+@source "../../django-datatable/django_datatable/templates";
 @plugin "./daisyui.mjs";

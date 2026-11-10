@@ -1,12 +1,12 @@
 <div id="item-table" hx-target="#item-table" hx-swap="outerHTML"
      data-matching="{{ matching_new_count }}" data-filters="{{ table.filter_query }}" data-filtered="{{ table.active_count }}" x-init="tableLoaded($el)">
   {% if table.has_any_rows %}
-    {% include "partials/datatable/toolbar.html" %}
+    {% include "django_datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
         <thead><tr>
           {% if can_manage %}<th class="dt-sticky dt-lead">{% if matching_new_count %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all New items on this page" title="Tick or untick all New items on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}
-          {% include "partials/datatable/head_cells.html" with lead_column=can_manage %}
+          {% include "django_datatable/head_cells.html" with lead_column=can_manage %}
           {% if can_manage %}<th class="text-right">Actions</th>{% endif %}
         </tr></thead>
         <tbody>
@@ -16,7 +16,7 @@
         </tbody>
       </table>
     </div>
-    {% include "partials/datatable/pager.html" %}
+    {% include "django_datatable/pager.html" %}
   {% else %}
     <div role="alert" class="alert alert-soft alert-info"><span>No items yet. They are added automatically when an ERP file is confirmed.</span></div>
   {% endif %}

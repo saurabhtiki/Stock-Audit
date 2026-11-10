@@ -10,12 +10,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.cache import patch_vary_headers
-
-from audits import dashboards
-from audits.models import Action, Audit, AuditLine, Query
-from audits.permissions import branches_with_right, forbidden
-from audits.views import _is_htmx, _vary_on_htmx
-from core.datatable import (
+from django_datatable import (
     CHOICE,
     DATE,
     NUMBER,
@@ -24,6 +19,11 @@ from core.datatable import (
     RowsTable,
     rows_csv_response,
 )
+
+from audits import dashboards
+from audits.models import Action, Audit, AuditLine, Query
+from audits.permissions import branches_with_right, forbidden
+from audits.views import _is_htmx, _vary_on_htmx
 
 logger = logging.getLogger(__name__)
 

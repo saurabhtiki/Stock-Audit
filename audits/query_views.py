@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from django_datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 from accounts.access import visible_branches
 from audits import queries as query_logic
@@ -27,7 +28,6 @@ from audits.permissions import (
     get_visible_audit,
 )
 from audits.views import _is_htmx, _posted_ids, _vary_on_htmx
-from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 logger = logging.getLogger(__name__)
 

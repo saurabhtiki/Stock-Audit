@@ -1,10 +1,10 @@
 {% load humanize %}
 <div id="status-table" hx-target="#status-table" hx-swap="outerHTML">
   {% if table.has_any_rows %}
-    {% include "partials/datatable/toolbar.html" %}
+    {% include "django_datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
-        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <thead><tr>{% include "django_datatable/head_cells.html" %}</tr></thead>
         <tbody>
           {% for audit in table.page %}
             <tr>
@@ -29,7 +29,7 @@
         </tbody>
       </table>
     </div>
-    {% include "partials/datatable/pager.html" %}
+    {% include "django_datatable/pager.html" %}
   {% else %}
     <div role="alert" class="alert alert-soft alert-info"><span>No audits in these Branches and months. Try a wider month range.</span></div>
   {% endif %}

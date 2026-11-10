@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.cache import patch_vary_headers
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
+from django_datatable import CHOICE, DATE, NUMBER, Column, DataTable, table_response
 
 from accounts.access import visible_branches
 from audits import counting, dashboards, erp_import
@@ -36,7 +37,6 @@ from audits.permissions import (
 )
 from audits.queries import queries_for_audit
 from core.activity import diff, log_activity, snapshot
-from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable, table_response
 
 logger = logging.getLogger(__name__)
 

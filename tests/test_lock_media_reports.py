@@ -613,8 +613,9 @@ def test_report_tick_frozen_after_lock_even_on_open_query(raised, replier, locke
 
 
 def test_excel_formula_guard_matches_csv():
+    from django_datatable import formula_safe
+
     from audits.reports import _cell
-    from core.datatable import formula_safe
 
     assert formula_safe("=SUM(A1)") == "'=SUM(A1)"
     assert formula_safe("-5") == "-5"  # a plain number stays a number

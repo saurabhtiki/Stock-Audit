@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db.models import CharField, Q, Sum
 from django.db.models.functions import Cast
 from django.utils import timezone
+from django_datatable import formula_safe
 from openpyxl import Workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -38,7 +39,6 @@ from audits.models import (
     QueryUpdate,
     Remark,
 )
-from core.datatable import formula_safe
 from core.models import ActivityLog
 
 logger = logging.getLogger(__name__)

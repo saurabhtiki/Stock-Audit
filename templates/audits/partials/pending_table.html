@@ -3,10 +3,10 @@
 {% with table=pending_table tab=pending_tab.name %}
 <div id="pending-table" hx-target="#pending-table" hx-swap="outerHTML">
   {% if table.has_any_rows %}
-    {% include "partials/datatable/toolbar.html" %}
+    {% include "django_datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
-        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <thead><tr>{% include "django_datatable/head_cells.html" %}</tr></thead>
         <tbody>
           {% for row in table.page %}
             <tr>
@@ -50,7 +50,7 @@
         </tbody>
       </table>
     </div>
-    {% include "partials/datatable/pager.html" %}
+    {% include "django_datatable/pager.html" %}
   {% else %}
     <div role="alert" class="alert alert-soft alert-success"><span>{{ pending_tab.empty }} 🎉</span></div>
   {% endif %}

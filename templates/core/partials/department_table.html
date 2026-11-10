@@ -3,4 +3,4 @@
 <div id="department-add" class="mb-2 flex justify-end" hx-swap-oob="true">
   <a href="{% url 'core:department_create' %}{% if company_id %}?company={{ company_id }}{% endif %}" class="btn btn-primary" title="Add a department to a company">Add department</a>
 </div>
-{% include "partials/datatable/list_table.html" with row_template="core/partials/department_row.html" actions_heading=True empty_text="No departments yet. Use “Add department” to create one." %}
+{% include "django_datatable/list_table.html" with row_template="core/partials/department_row.html" actions_heading=True empty_text="No departments yet. Use “Add department” to create one." %}

@@ -2,12 +2,12 @@
 <div id="query-table" hx-target="#query-table" hx-swap="outerHTML"
      {% if can_bulk %}data-matching="{{ matching_count }}" data-filters="{{ table.filter_query }}" data-filtered="{{ table.active_count }}" x-init="tableLoaded($el)"{% endif %}>
   {% if table.has_any_rows %}
-    {% include "partials/datatable/toolbar.html" %}
+    {% include "django_datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
         <thead><tr>
           {% if can_bulk %}<th class="dt-sticky dt-lead">{% if pickable_ids %}<input type="checkbox" class="checkbox checkbox-sm" aria-label="Tick all open queries on this page" title="Tick or untick all open queries on this page" @change="tickPage($el.checked)">{% endif %}</th>{% endif %}
-          {% include "partials/datatable/head_cells.html" with lead_column=can_bulk %}
+          {% include "django_datatable/head_cells.html" with lead_column=can_bulk %}
         </tr></thead>
         <tbody>
           {% for query in table.page %}
@@ -39,7 +39,7 @@
         </tbody>
       </table>
     </div>
-    {% include "partials/datatable/pager.html" %}
+    {% include "django_datatable/pager.html" %}
   {% else %}
     <div role="alert" class="alert alert-soft alert-info"><span>No queries yet. They are raised when an audit is marked Checking Done.</span></div>
   {% endif %}

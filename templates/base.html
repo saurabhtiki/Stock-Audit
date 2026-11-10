@@ -8,7 +8,8 @@
   {# Every file is served by the app itself, so it works on an office network without internet. #}
   <link href="{% static 'css/tailwind.css' %}" rel="stylesheet">
   <script src="{% static 'vendor/htmx-2.0.6.min.js' %}"></script>
-  <script defer src="{% static 'js/datatable.js' %}"></script>
+  <link href="{% static 'django_datatable/datatable.css' %}" rel="stylesheet">
+  <script defer src="{% static 'django_datatable/datatable.js' %}"></script>
   <script defer src="{% static 'vendor/alpine-3.14.9.min.js' %}"></script>
   <script defer src="{% static 'js/menus.js' %}"></script>
   <script defer src="{% static 'js/counting.js' %}"></script>

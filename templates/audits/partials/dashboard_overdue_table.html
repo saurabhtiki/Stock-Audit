@@ -1,2 +1,2 @@
 {# Overdue actions on the Queries & actions tab (shared table: search, filters, sort, pages, CSV). #}
-{% include "partials/datatable/list_table.html" with row_template="audits/partials/dashboard_overdue_row.html" empty_text="No overdue actions. Every action with a due date that has passed is Verified." %}
+{% include "django_datatable/list_table.html" with row_template="audits/partials/dashboard_overdue_row.html" empty_text="No overdue actions. Every action with a due date that has passed is Verified." %}

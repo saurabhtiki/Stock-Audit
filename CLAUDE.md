@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 8.1 (PDF query under its line, Query page app-tabs, no Branch list on Home) done. Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
+Phase 8.1 done. Table moved into the reusable package `../django-datatable` (edit it there, not here). Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

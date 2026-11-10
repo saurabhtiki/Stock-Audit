@@ -1,4 +1,4 @@
-"""Phase 2.2: the reusable server-side table (core/datatable.py) and the two screens using it."""
+"""Phase 2.2: the reusable server-side table (django_datatable) and the two screens using it."""
 
 from datetime import date
 from decimal import Decimal
@@ -6,9 +6,9 @@ from decimal import Decimal
 import pytest
 from django.http import QueryDict
 from django.urls import reverse
+from django_datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 from audits.models import Audit, AuditLine, Item
-from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 from .conftest import client_for
 from .test_audits import grant, manager, priya  # noqa: F401  (fixtures)

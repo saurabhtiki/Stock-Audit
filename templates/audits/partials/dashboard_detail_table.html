@@ -2,10 +2,10 @@
 {# Items behind one variance / trend row, in our usual table (filters, sort, pages, CSV). Built by dashboard_views._detail_table. #}
 <div id="{{ table.table_id }}" hx-target="#{{ table.table_id }}" hx-swap="outerHTML">
   {% if table.has_any_rows %}
-    {% include "partials/datatable/toolbar.html" %}
+    {% include "django_datatable/toolbar.html" %}
     <div class="overflow-x-auto rounded-box bg-base-100">
       <table class="table table-sm table-zebra data-table">
-        <thead><tr>{% include "partials/datatable/head_cells.html" %}</tr></thead>
+        <thead><tr>{% include "django_datatable/head_cells.html" %}</tr></thead>
         <tbody>
           {% for line in table.page %}
             <tr>
@@ -23,7 +23,7 @@
         </tbody>
       </table>
     </div>
-    {% include "partials/datatable/pager.html" %}
+    {% include "django_datatable/pager.html" %}
   {% else %}
     <p class="text-sm text-base-content/70">Every counted item matched the ERP: no variance.</p>
   {% endif %}

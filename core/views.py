@@ -12,11 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.http import require_POST
-
-from accounts.access import visible_branches
-from accounts.middleware import SESSION_COMPANY_KEY
-from core.activity import diff, log_activity, snapshot
-from core.datatable import (
+from django_datatable import (
     ACTIVE_INACTIVE,
     CHOICE,
     DATE,
@@ -25,6 +21,10 @@ from core.datatable import (
     DataTable,
     table_response,
 )
+
+from accounts.access import visible_branches
+from accounts.middleware import SESSION_COMPANY_KEY
+from core.activity import diff, log_activity, snapshot
 from core.forms import BranchForm, CompanyForm, DepartmentForm
 from core.models import ActivityLog, Branch, Company, Department
 from core.permissions import admin_required

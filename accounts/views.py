@@ -7,6 +7,7 @@ from django.db.models import Aggregate, CharField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Concat, Replace
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
+from django_datatable import CHOICE, YES_NO, Column, DataTable, table_response
 
 from accounts.forms import (
     MembershipAddForm,
@@ -19,7 +20,6 @@ from accounts.models import Membership, User
 from accounts.rights import RIGHT_NAMES, RIGHTS, Role
 from accounts.rights_service import copy_rights, rights_grid, save_rights
 from core.activity import diff, log_activity, snapshot
-from core.datatable import CHOICE, YES_NO, Column, DataTable, table_response
 from core.models import Department
 from core.permissions import admin_required
 

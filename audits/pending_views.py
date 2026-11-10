@@ -11,11 +11,11 @@ from django.db.models.functions import Coalesce, NullIf
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.cache import patch_vary_headers
+from django_datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 from audits.models import Query
 from audits.queries import pending_for
 from audits.views import _is_htmx, _vary_on_htmx
-from core.datatable import CHOICE, DATE, NUMBER, Column, DataTable
 
 logger = logging.getLogger(__name__)
 
