@@ -104,6 +104,25 @@ def test_queries_tab_narrows_to_picked_items(admin_client, admin_user, north):
     assert "recount A1" in page and "recount B1" not in page
 
 
+def test_ageing_numbers_open_query_list_with_picked_items(admin_client, admin_user, north):
+    make_audit(
+        north,
+        "Aug",
+        TODAY,
+        admin_user,
+        lines=[("A1", 10, 0, 1), ("B1", 10, 0, 1), ("C1", 10, 0, 1)],
+    )
+    picked = {"item": [str(item("A1").pk), str(item("B1").pk)]}
+    page = dash(admin_client, "queries", **picked).content.decode()
+    assert "item_code=A1&amp;item_code=B1" in page  # the ageing links carry both items
+    url = reverse("audits:query_list") + "?item_code=A1&item_code=B1"
+    listed = admin_client.get(url).content.decode()
+    assert "Item No: A1, B1" in listed  # the filter shows as a chip the user can clear
+    rows = admin_client.get(url + "&export=csv")
+    codes = {line[4] for line in csv_of(rows)[1:]}
+    assert codes == {"A1", "B1"}
+
+
 # ---------- 2. One Trend tab ----------
 
 

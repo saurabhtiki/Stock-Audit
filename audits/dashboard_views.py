@@ -165,6 +165,7 @@ def _ageing_link(filters, branch_code: str, low=None, high=None, today=None) -> 
     ]
     if filters.audit_type:
         params.append(("audit_type", filters.audit_type))
+    params += [("item_code", item.code) for item in filters.items]
     if high is not None:
         params.append(("created_at_min", (today - timedelta(days=high)).isoformat()))
     if low is not None:

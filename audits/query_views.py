@@ -48,7 +48,8 @@ QUERY_COLUMNS = [
     Column("audit_title", "Audit"),
     Column("audit_date", "Audit date", type=DATE),
     Column("audit_type", "Type", type=CHOICE, choices=dict(Audit.Type.choices)),
-    Column("item_code", "Item No"),
+    # Tick list, so the dashboard can pass several items.
+    Column("item_code", "Item No", type=CHOICE),
     Column("description", "Description"),
     Column("variance_qty", "Variance", type=NUMBER),
     Column("variance_value", "Var. value", type=NUMBER),
