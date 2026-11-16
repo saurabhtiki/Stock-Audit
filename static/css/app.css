@@ -77,6 +77,8 @@ body {
 [data-theme="stockaudit-dark"] .badge-soft.badge-primary { color: #a9c8f2; }
 .avatar-initial::before { content: attr(data-initial); }
 [x-cloak] { display: none !important; }
+/* Repeat items grid: quiet marks for OK / not counted / not in audit, so the red and blue numbers stand out. */
+.grid-dot { color: color-mix(in oklab, var(--color-base-content) 40%, transparent); font-weight: 700; }
 
 /* Top bar: solid brand colour. Menus inside it keep normal text colours. */
 .app-header { background: var(--color-primary); color: var(--color-primary-content); }

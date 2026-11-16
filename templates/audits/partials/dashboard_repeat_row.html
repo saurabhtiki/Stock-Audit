@@ -1,8 +1,35 @@
 {% load humanize %}
-<tr>
-  <td class="dt-sticky font-bold">{{ row.branch_code }}</td>
-  <td>{% if row.query_id %}<a class="link link-primary font-bold" href="{% url 'audits:query_detail' row.query_id %}" title="Open the latest query: it shows this item's history across audits">{{ row.item_code }}</a>{% else %}{{ row.item_code }}{% endif %}</td>
-  <td>{{ row.description }}</td>
-  <td class="text-right"><span class="badge {% if row.streak >= 3 %}badge-error{% else %}badge-warning{% endif %}" title="Audits in a row with Excess / Shortage">{{ row.streak }}</span></td>
-  <td class="text-right font-bold {% if row.total_value < 0 %}text-error{% else %}text-success{% endif %}">{{ row.total_value|floatformat:2|intcomma }}</td>
+{# One repeat item: Branch, item, the last 6 audits as cells, streak, value. Click = detail row under it. #}
+<tr x-data="{ open: false }" class="cursor-pointer hover:bg-base-200" tabindex="0" role="button" :aria-expanded="open" aria-controls="{{ row.detail_id }}"
+    title="Click to see every audit of {{ row.item_code }} in {{ row.branch_code }}"
+    @click="open = !open; $el.nextElementSibling.hidden = !open" @keydown.enter.prevent="$el.click()" @keydown.space.prevent="$el.click()"
+    hx-get="{{ row.detail_url }}" hx-target="#{{ row.detail_id }}" hx-trigger="click once" hx-push-url="false" hx-swap="innerHTML">
+  <td class="dt-sticky font-bold">
+    <span class="inline-flex items-center gap-1">
+      <svg class="h-3 w-3 transition-transform" :class="open && 'rotate-90'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      {{ row.branch_code }}
+    </span>
+  </td>
+  <td class="font-bold">{{ row.item_code }}</td>
+  <td class="max-w-xs"><span class="truncate" title="{{ row.description }}">{{ row.description }}</span>{% if row.uom %} <span class="text-xs text-base-content/50" title="Unit of measure">({{ row.uom }})</span>{% endif %}</td>
+  {% for cell in row.cells %}
+    {% if cell.state == "none" %}
+      <td class="w-14 text-right text-base-content/30" title="This Branch has no earlier counted audit">&nbsp;</td>
+    {% else %}
+      <td class="w-14 text-right tabular-nums"
+          title="{{ cell.audit_title }} · {{ cell.audit_date|date:'d M Y' }}{% if cell.state == 'missing' %} · Item not in this audit{% elif cell.state == 'not_counted' %} · Book {{ cell.erp_qty|floatformat:'-3' }}, not counted{% else %} · Book {{ cell.erp_qty|floatformat:'-3' }}, Counted {{ cell.physical_qty|floatformat:'-3' }}{% if cell.state == 'short' %} · Short {{ cell.qty|floatformat:'-3'|slice:'1:' }}{% elif cell.state == 'excess' %} · Excess {{ cell.qty|floatformat:'-3' }}{% else %} · OK{% endif %}{% if cell.value is not None %} · Value {{ cell.value|floatformat:2|intcomma }}{% endif %}{% endif %}">
+        {% if cell.state == "short" %}<b class="text-error">{{ cell.qty|floatformat:"-3" }}</b>
+        {% elif cell.state == "excess" %}<b class="text-info">+{{ cell.qty|floatformat:"-3" }}</b>
+        {% elif cell.state == "ok" %}<span class="grid-dot" aria-label="OK">·</span>
+        {% elif cell.state == "not_counted" %}<span class="grid-dot" aria-label="Not counted">○</span>
+        {% else %}<span class="grid-dot" aria-label="Not in this audit">–</span>{% endif %}
+      </td>
+    {% endif %}
+  {% endfor %}
+  <td class="text-right whitespace-nowrap">
+    <span class="badge badge-sm {% if row.streak >= 4 %}badge-error{% elif row.streak == 3 %}badge-warning{% else %}badge-ghost{% endif %}"
+          title="{{ row.streak }} audits in a row with {% if row.direction == 'mixed' %}Excess and Shortage mixed{% elif row.direction == 'short' %}Shortage{% else %}Excess{% endif %}">{{ row.streak }} {{ row.direction }}</span>
+  </td>
+  <td class="text-right font-bold {% if row.total_value < 0 %}text-error{% else %}text-info{% endif %}" title="Total variance value of the audits in this streak">{{ row.total_value|floatformat:2|intcomma }}</td>
 </tr>
+<tr hidden><td colspan="{{ table.columns|length }}" class="bg-base-200 p-3"><div id="{{ row.detail_id }}" data-drilldown><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>

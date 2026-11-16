@@ -1,0 +1,26 @@
+{% load humanize %}
+{# Every audit of one item in one Branch (repeat row panel). Built by dashboard_views._repeat_detail. #}
+{% if lines %}
+  <p class="mb-1 text-xs text-base-content/70">Every counted audit of this item in the picked months, newest first.</p>
+  <div class="overflow-x-auto">
+    <table class="table table-xs bg-base-100">
+      <thead><tr><th>Audit</th><th>Date</th><th class="text-right">Book qty</th><th class="text-right">Counted qty</th><th class="text-right">Diff</th><th class="text-right">Value</th><th>Status</th><th>Query</th></tr></thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td><a class="link link-primary" href="{% url 'audits:audit_detail' line.audit_id %}" title="Open this audit">{{ line.audit.title }}</a></td>
+            <td class="whitespace-nowrap">{{ line.audit.audit_date|date:"d M Y" }}</td>
+            <td class="text-right tabular-nums">{{ line.erp_qty|floatformat:"-3" }}</td>
+            <td class="text-right tabular-nums">{% if line.physical_qty is not None %}{{ line.physical_qty|floatformat:"-3" }}{% else %}<span class="text-base-content/50" title="Not counted">–</span>{% endif %}</td>
+            <td class="text-right tabular-nums font-bold {% if line.count_status == 'shortage' %}text-error{% elif line.count_status == 'excess' %}text-info{% endif %}">{% if line.variance_qty is not None %}{% if line.variance_qty > 0 %}+{% endif %}{{ line.variance_qty|floatformat:"-3" }}{% endif %}</td>
+            <td class="text-right tabular-nums">{% if line.variance_value is not None %}{{ line.variance_value|floatformat:2|intcomma }}{% endif %}</td>
+            <td>{{ line.get_count_status_display }}</td>
+            <td>{% if line.query %}<a class="link link-primary" href="{% url 'audits:query_detail' line.query.pk %}" title="Open this query">{% include "audits/partials/query_status_badge.html" with status=line.query.status %}</a>{% else %}<span class="text-base-content/50" title="No query: OK, not counted, or inside the tolerance">–</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-sm text-base-content/70">No counted audit of this item in the picked months.</p>
+{% endif %}

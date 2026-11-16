@@ -140,8 +140,9 @@ def test_repeat_items_on_table_grouped_by_branch(admin_client, admin_user, north
         "utf-8-sig"
     )
     rows = [line.split(",") for line in csv_text.splitlines()[1:]]
-    assert [(r[0], r[1], r[3]) for r in rows] == [("N1", "A1", "2"), ("S1", "A1", "2")]
-    assert rows[0][4] == "-20.00"
+    # Branch, Item No, Description, 6 audit cells, Streak, Streak value
+    assert [(r[0], r[1], r[9]) for r in rows] == [("N1", "A1", "2 short"), ("S1", "A1", "2 short")]
+    assert rows[0][10] == "-20.00"
     only_south = b"".join(
         dash(admin_client, "repeat", export="csv", branch_code="S1").streaming_content
     ).decode("utf-8-sig")
@@ -212,8 +213,12 @@ def test_repeat_item_opens_query_with_item_history(admin_client, admin_user, nor
     make_audit(north, "Jul26", today - timedelta(days=40), admin_user, lines=[("A1", 10, 0, 1)])
     latest = make_audit(north, "Aug26", today, admin_user, lines=[("A1", 10, 0, 1)])
     query = latest.queries.get()
-    page = dash(admin_client, "repeat").content.decode()
-    assert reverse("audits:query_detail", args=[query.pk]) in page
+    # Phase 9: the row's panel lists each audit with a link to its query.
+    panel = admin_client.get(
+        reverse("audits:dashboard_detail", args=["repeat"]),
+        {"row_branch": north.pk, "row_item": query.item_id},
+    ).content.decode()
+    assert reverse("audits:query_detail", args=[query.pk]) in panel
     detail = admin_client.get(reverse("audits:query_detail", args=[query.pk])).content.decode()
     assert "Item history" in detail and "Jul26" in detail and "Aug26" in detail
 

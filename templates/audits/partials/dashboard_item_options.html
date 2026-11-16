@@ -1,0 +1,14 @@
+{# Search results for the dashboard Item filter (htmx, inside the itemPicker component). #}
+{% for option in options %}
+  <li>
+    <button type="button" class="justify-between" data-id="{{ option.id }}" data-label="{{ option.label }}"
+            @click="toggle($el.dataset.id, $el.dataset.label)" :class="has('{{ option.id }}') && 'menu-active'"
+            :aria-pressed="has('{{ option.id }}')" title="Click to pick or unpick {{ option.label }}">
+      <span class="truncate">{{ option.label }}</span>
+      <span x-show="has('{{ option.id }}')" aria-hidden="true">✓</span>
+    </button>
+  </li>
+{% empty %}
+  <li class="menu-title text-xs font-normal">{% if text %}No item matches “{{ text }}”.{% else %}No items in this company yet.{% endif %}</li>
+{% endfor %}
+{% if more %}<li class="menu-title text-xs font-normal">More items match: type more letters to narrow the list.</li>{% endif %}

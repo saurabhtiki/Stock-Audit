@@ -1,0 +1,11 @@
+{# Min streak quick buttons above the repeat table. `oob` = sent along with a table redraw (htmx out-of-band), so the active button and links follow the table's search / filters. #}
+<div id="repeat-min-streak" class="mb-2 flex flex-wrap items-center gap-2 text-sm"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <span class="text-base-content/70" title="Hide items with shorter runs">Min streak:</span>
+  <div class="join">
+    {% for button in min_streaks %}
+      <a href="{{ button.url }}" hx-get="{{ button.url }}" hx-target="#repeat-table" hx-swap="outerHTML" hx-push-url="true"
+         class="btn btn-xs join-item {% if button.active %}btn-primary{% else %}btn-outline btn-primary{% endif %}" title="{{ button.tip }}"
+         {% if button.active %}aria-current="true"{% endif %}>{{ button.label }}</a>
+    {% endfor %}
+  </div>
+</div>

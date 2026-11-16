@@ -1,2 +1,3 @@
-{# Repeat items tab (shared table). Rows are grouped by Branch unless the user sorts another way. #}
-{% include "django_datatable/list_table.html" with row_template="audits/partials/dashboard_repeat_row.html" empty_text="No item had Excess / Shortage in 2 audits in a row." %}
+{# Repeat items table alone (redrawn by htmx on a table click), plus the Min streak buttons out-of-band. #}
+{% include "audits/partials/dashboard_repeat_buttons.html" with oob=True %}
+{% include "audits/partials/dashboard_repeat_list.html" %}

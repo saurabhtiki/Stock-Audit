@@ -150,7 +150,7 @@ def test_detail_uses_table_with_filters_and_csv(admin_client, two_audits, north)
 
 
 def test_variance_tab_has_expander_urls(admin_client, two_audits):
-    body = admin_client.get(reverse("audits:dashboard_tab", args=["variance"])).content.decode()
+    body = admin_client.get(reverse("audits:dashboard_tab", args=["trend"])).content.decode()
     assert reverse("audits:dashboard_detail", args=["variance"]) in body
     assert 'hx-trigger="click once"' in body
 
@@ -175,8 +175,8 @@ def test_drilldown_refuses_other_branch(viewer, two_audits, south, north):  # no
 
 def test_drilldown_bad_values(admin_client, north):  # noqa: F811
     assert detail(admin_client, "variance", row_branch=north.pk, month="soon").status_code == 400
-    # Repeat items have no ▸ any more (Phase 8): the item link opens its query history.
-    assert detail(admin_client, "repeat", row_branch=north.pk).status_code == 404
+    # Repeat row panel (Phase 9) needs the item too.
+    assert detail(admin_client, "repeat", row_branch=north.pk).status_code == 400
     assert detail(admin_client, "nope").status_code == 404
 
 
@@ -188,14 +188,16 @@ def test_drilldown_needs_view_reports(raised, replier):  # noqa: F811
 
 
 def test_drilldown_boxes_marked_for_error_messages(admin_client, two_audits):
-    body = admin_client.get(reverse("audits:dashboard_tab", args=["variance"])).content.decode()
+    body = admin_client.get(reverse("audits:dashboard_tab", args=["trend"])).content.decode()
     assert "data-drilldown" in body
 
 
-def test_trend_item_mode_has_no_expander(admin_client, two_audits):
+def test_trend_expander_follows_mode(admin_client, two_audits, north):  # noqa: F811
     url = reverse("audits:dashboard_tab", args=["trend"])
-    assert "dashboard/detail/trend" in admin_client.get(url).content.decode()
-    assert "dashboard/detail/trend" not in admin_client.get(url, {"item": "X1"}).content.decode()
+    many = admin_client.get(url).content.decode()  # several Branches: Branch × month rows
+    assert "dashboard/detail/variance" in many and "dashboard/detail/trend" not in many
+    one = admin_client.get(url, {"branch": north.pk}).content.decode()  # one Branch: per audit
+    assert "dashboard/detail/trend" in one and "dashboard/detail/variance" not in one
 
 
 def test_ageing_link_carries_audit_type(admin_client, admin_user, north):  # noqa: F811

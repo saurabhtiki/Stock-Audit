@@ -705,3 +705,48 @@ New features, email alerts, changing who can do what, links from the PDF to the 
 `tests/test_phase8_1.py`: query block under its line (reply, update, overdue action, summary count), no-reply and
 closed-note text, query on an OK line in "Other queries", Query page uses `app-tabs`, Home has no Branch list.
 Also made a Phase 7 test check the cell text (`>N1<`) so a random token can't fail it.
+
+## Phase 9 — Dashboard: item filter, one Trend tab, repeat grid (DONE — 406 tests pass)
+
+Built notes: picker = `dashboard_item_picker.html` + `dashboard_item_options.html` (search URL `dashboard/items/`),
+Alpine `itemPicker` in `static/js/dashboard.js`. Repeat grid cells are drawn in our own row template, so the
+`django-datatable` package did not change. Min streak buttons = `dashboard_repeat_buttons.html`, sent out-of-band
+when the table redraws. Test-env preview: launch config `django-test-8002` (DJANGO_ENV=test). Tests: `tests/test_phase9.py`.
+
+Goal: let users narrow the dashboard to some items, drop the duplicate Variance/Trend tabs, and make
+repeating items readable at a glance.
+
+Example: the user picks Branch BR01 and items "Soap" + "Rice" in the top bar. Trend shows one point per
+BR01 audit for just those two items. Repeat items shows a row like
+`ITM-007 Soap 100g (pcs)  BR01  ·  -12  -8  -15  -10  -9   5 short  ₹4,200`; clicking it opens every
+BR01 audit of that item (book, counted, diff, value, query).
+
+### Decisions (from grilling — all recommended answers confirmed)
+| # | Decision |
+|---|---|
+| 1 | **Item filter** in the top bar: one multi-select picker that searches code **and** description while typing (loads matches from the server, not the whole list); picked items show as chips. URL param `item` (repeatable). |
+| 2 | Item filter is used by **Trend, Repeat items, Queries & actions** (ageing + overdue, by the query's line item). **Status** shows it greyed out with tooltip "Not used on this tab". |
+| 3 | **Variance + Trend → one "Trend" tab**, using only the top-bar filters (its own Branch box and Item box are removed). **1 Branch picked** → one point per audit (today's Trend, with ▸ details). **Several Branches** → Excess / Shortage / Net totals per month (today's Variance chart) and a Branch × month table with ▸. Items picked → only those items' lines count. |
+| 4 | Old links `/dashboard/variance/` go to the Trend tab (bookmarks keep working). |
+| 5 | **Repeat grid**: 6 columns = the last 6 audits of the row's own Branch, oldest left → latest right. Cells: shortage qty in **red** (`-12`), excess qty in **blue** (`+4`), grey dot `·` = counted OK, hollow `○` = not counted, empty = no audit. Numbers right-aligned, equal column width. Hover = "Audit, date, Book 50, Counted 38, Short 12, ₹840". If **one** Branch is picked the headers show real dates ("12 Mar"); otherwise "6th last … Latest" and the date is in the tooltip. UoM shown small next to the item. |
+| 6 | Repeat rule unchanged (2+ audits in a row Excess/Shortage). **Streak** column says "5 short" / "3 excess" / "4 mixed". **Value** = total ₹ of the streak. Quick filter **Min streak 2 / 3 / 4+** (default 2). Default sort: longest streak, then biggest loss. Search, Branch filter, pages and CSV stay (CSV also has the 6 qty columns). |
+| 7 | **Row click** opens a panel under the row: every audit of that Branch in the picked months (OK and not counted too), newest first: Audit, Date, Book qty, Counted qty, Diff, Value, Query status + "Open query" link. Replaces today's "Item No opens latest query". |
+
+### What gets built
+1. `audits/dashboards.py`: `DashboardFilters` gets `items` (read + checked against the company in `read_filters`, kept in `as_params`); item filter applied in trend, repeat and query functions. `repeat_items` also returns the last-6 cells per row and streak direction; new `repeat_history(branch, item)` for the row panel.
+2. Item search endpoint (HTMX, returns up to 20 matches of code/description, only this company's items) + picker partial in `dashboard_body.html` (Alpine for chips).
+3. `dashboard_views.py`: `variance` tab removed from `TABS` (URL redirects to `trend`); merged `_trend_context` (1 Branch vs many); repeat context with grid columns and Min streak buttons; detail kind `repeat` comes back for the row panel.
+4. Templates: `dashboard_trend.html` (no own filters, two chart modes), `dashboard_variance.html` removed, repeat table partial with the grid cells / tooltips / expandable row.
+5. Grid cell look built with the `django-datatable` package's own options; if a custom cell template is needed, add it in the package repo (push, bump `rev`), not here.
+6. Rebuild `static/css/tailwind.css` if new classes are used.
+
+### Not in this phase
+Per-Branch comparison lines on the chart, changing the repeat rule, item filter on Status, email alerts.
+
+### Tests
+- item filter: search finds by code and by description; other company's items never found or applied; bad ids → message, ignored
+- Trend: 1 Branch → per-audit rows; many Branches → month totals = old Variance numbers; items narrow the sums; `/dashboard/variance/` redirects
+- Queries: ageing + overdue counts narrow to picked items
+- repeat grid: last-6 cells right (red/blue qty, OK dot, not counted, missing audit); different Branches get their own columns; streak direction (short/excess/mixed); Min streak filter; CSV has the qty columns
+- row panel: every audit in the months, newest first, query link; other company / not-allowed Branch → 404
+- Status tab ignores the item filter; all existing tests keep passing

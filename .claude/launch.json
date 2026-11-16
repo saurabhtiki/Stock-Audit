@@ -50,6 +50,22 @@
       ],
       "port": 8005,
       "autoPort": false
+    },
+    {
+      "name": "django-test-8002",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "python",
+        "manage.py",
+        "runserver",
+        "8002"
+      ],
+      "env": {
+        "DJANGO_ENV": "test"
+      },
+      "port": 8002,
+      "autoPort": false
     }
   ]
 }

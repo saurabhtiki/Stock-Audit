@@ -48,7 +48,8 @@ AGE_BUCKETS = (
     ("90+", 91, None),
 )
 DEFAULT_MONTHS = 12
-FILTER_PARAMS = ("branch", "from", "to", "type")
+FILTER_PARAMS = ("branch", "from", "to", "type", "item")
+MAX_PICKED_ITEMS = 50  # more than this in the Item filter is ignored (keeps URLs short)
 
 
 def _month_start(text: str) -> date | None:
@@ -67,7 +68,7 @@ def _shift_months(day: date, months: int) -> date:
 
 @dataclass
 class DashboardFilters:
-    """The filter bar: Branches (subset of the allowed ones), month range and audit type."""
+    """The filter bar: Branches (subset of the allowed ones), month range, audit type and items."""
 
     allowed: list  # Branches the user may see on the dashboard
     branches: list
@@ -75,6 +76,11 @@ class DashboardFilters:
     month_to: date  # first day of the last month shown
     audit_type: str = ""  # "" = all
     errors: list[str] = field(default_factory=list)
+    items: list = field(default_factory=list)  # picked Items; empty = all items
+
+    @property
+    def item_ids(self) -> list[int]:
+        return [item.pk for item in self.items]
 
     @property
     def date_to(self) -> date:
@@ -92,6 +98,7 @@ class DashboardFilters:
             pairs += [("branch", str(branch.pk)) for branch in self.branches]
         if self.audit_type:
             pairs.append(("type", self.audit_type))
+        pairs += [("item", str(item.pk)) for item in self.items]
         return pairs
 
     def audits(self, include_cancelled: bool = False):
@@ -109,6 +116,20 @@ class DashboardFilters:
     def final_audits(self):
         """Audits whose counts are final (Checking Done or Locked)."""
         return self.audits().filter(stage__in=QUERY_STAGES)
+
+
+def _read_items(params, company_id, errors: list[str]) -> list:
+    """Picked Items (`item` = Item id, may repeat), only from this company."""
+    wanted = list(dict.fromkeys(value for value in params.getlist("item") if value))
+    if len(wanted) > MAX_PICKED_ITEMS:
+        errors.append(f"Only the first {MAX_PICKED_ITEMS} picked items are used.")
+        wanted = wanted[:MAX_PICKED_ITEMS]
+    ids = [value for value in wanted if value.isdecimal()]
+    found = Item.objects.filter(company_id=company_id, pk__in=ids) if ids else []
+    by_id = {str(item.pk): item for item in found}
+    if len(by_id) < len(wanted):
+        errors.append("Some picked items were not found in this company, so they were left out.")
+    return [by_id[value] for value in wanted if value in by_id]
 
 
 def read_filters(params, allowed_branches, today: date | None = None) -> DashboardFilters:
@@ -137,7 +158,8 @@ def read_filters(params, allowed_branches, today: date | None = None) -> Dashboa
     audit_type = params.get("type", "")
     if audit_type not in Audit.Type.values:
         audit_type = ""
-    return DashboardFilters(allowed, branches, month_from, month_to, audit_type, errors)
+    items = _read_items(params, allowed[0].company_id if allowed else None, errors)
+    return DashboardFilters(allowed, branches, month_from, month_to, audit_type, errors, items)
 
 
 # ---------- Audit status ----------
@@ -185,9 +207,10 @@ def with_progress(audits):
 
 def open_queries(filters: DashboardFilters):
     """Queries not Closed, raised by an audit inside the filters."""
-    return Query.objects.filter(audit__in=filters.final_audits()).exclude(
-        status=Query.Status.CLOSED
-    )
+    queries = Query.objects.filter(audit__in=filters.final_audits())
+    if filters.items:
+        queries = queries.filter(item__in=filters.item_ids)
+    return queries.exclude(status=Query.Status.CLOSED)
 
 
 def ageing_rows(filters: DashboardFilters, today: date | None = None) -> list[dict]:
@@ -213,9 +236,11 @@ def overdue_actions(filters: DashboardFilters, today: date | None = None):
     stay in the list until someone verifies them (the screen marks them "waiting to verify").
     Each row gets branch_code, audit_title, item_code, owner_name and days_late."""
     today = today or timezone.localdate()
+    actions = Action.objects.filter(query__audit__in=filters.final_audits(), due_date__lt=today)
+    if filters.items:
+        actions = actions.filter(query__item__in=filters.item_ids)
     return (
-        Action.objects.filter(query__audit__in=filters.final_audits(), due_date__lt=today)
-        .exclude(status=Action.Status.VERIFIED)
+        actions.exclude(status=Action.Status.VERIFIED)
         .annotate(
             branch_code=F("query__audit__branch__code"),
             audit_title=F("query__audit__title"),
@@ -244,10 +269,16 @@ def _excess_shortage():
     }
 
 
+def item_lines(filters: DashboardFilters):
+    """Lines of the final audits, only the picked items (all items when none picked)."""
+    lines = AuditLine.objects.filter(audit__in=filters.final_audits())
+    if filters.items:
+        lines = lines.filter(item__in=filters.item_ids)
+    return lines
+
+
 def counted_lines(filters: DashboardFilters):
-    return AuditLine.objects.filter(audit__in=filters.final_audits()).exclude(
-        count_status=AuditLine.Status.NOT_COUNTED
-    )
+    return item_lines(filters).exclude(count_status=AuditLine.Status.NOT_COUNTED)
 
 
 def variance_rows(filters: DashboardFilters) -> list[dict]:
@@ -288,24 +319,65 @@ def variance_by_month(rows: list[dict]) -> list[dict]:
 
 # ---------- Repeat items ----------
 
+GRID_AUDITS = 6  # the repeat grid shows the last 6 audits of each row's Branch
+STREAK_WORDS = {AuditLine.Status.SHORTAGE: "short", AuditLine.Status.EXCESS: "excess"}
+CELL_STATES = {
+    AuditLine.Status.SHORTAGE: "short",
+    AuditLine.Status.EXCESS: "excess",
+    AuditLine.Status.OK: "ok",
+    AuditLine.Status.NOT_COUNTED: "not_counted",
+}
+
+
+def _streak_direction(statuses: set) -> str:
+    """'short' / 'excess' when the whole run went one way, else 'mixed'."""
+    return STREAK_WORDS[statuses.pop()] if len(statuses) == 1 else "mixed"
+
+
+def _grid_cell(audit, line) -> dict:
+    """One cell of the repeat grid: what the item looked like in one audit."""
+    if audit is None:
+        return {"state": "none"}  # the Branch has fewer than 6 audits
+    cell = {"state": "missing", "audit_title": audit["title"], "audit_date": audit["audit_date"]}
+    if line is None:
+        return cell  # the item was not in this audit's ERP list
+    value = line["variance_value"]
+    cell.update(
+        state=CELL_STATES.get(line["count_status"], "not_counted"),
+        erp_qty=line["erp_qty"],
+        physical_qty=line["physical_qty"],
+        qty=line["variance_qty"],
+        value=None if value is None else _money(value),
+    )
+    return cell
+
 
 def repeat_items(filters: DashboardFilters, min_streak: int = 2) -> list[dict]:
     """Items that were Excess / Shortage in `min_streak` or more audits in a row of the same
     Branch. An audit where the item was OK, not counted or missing breaks the streak.
-    Only the longest streak per item and Branch is shown (the latest one on a tie)."""
+    Only the longest streak per item and Branch is shown (the latest one on a tie).
+    Each row also gets `cells`: the item in the last 6 audits of its Branch (oldest first)."""
     audits = filters.final_audits().order_by("branch_id", "audit_date", "id")
     position = {}  # audit id -> its place in the Branch's row of audits
-    counters: dict = defaultdict(int)
-    for audit_id, branch_id in audits.values_list("id", "branch_id"):
-        position[audit_id] = counters[branch_id]
-        counters[branch_id] += 1
+    branch_audits: dict = defaultdict(list)  # branch id -> its audits, oldest first
+    for audit in audits.values("id", "branch_id", "title", "audit_date"):
+        position[audit["id"]] = len(branch_audits[audit["branch_id"]])
+        branch_audits[audit["branch_id"]].append(audit)
 
-    flagged = defaultdict(list)  # (branch id, code, item) -> [(place, value, line id)]
-    lines = AuditLine.objects.filter(audit_id__in=position, count_status__in=FLAGGED)
-    for audit_id, branch_id, branch_code, item_id, value, line_id in lines.values_list(
-        "audit_id", "audit__branch_id", "audit__branch__code", "item_id", "variance_value", "id"
+    flagged = defaultdict(list)  # (branch id, code, item) -> [(place, value, line id, status)]
+    lines = item_lines(filters).filter(count_status__in=FLAGGED)
+    for audit_id, branch_id, branch_code, item_id, value, line_id, status in lines.values_list(
+        "audit_id",
+        "audit__branch_id",
+        "audit__branch__code",
+        "item_id",
+        "variance_value",
+        "id",
+        "count_status",
     ):
-        flagged[(branch_id, branch_code, item_id)].append((position[audit_id], value, line_id))
+        flagged[(branch_id, branch_code, item_id)].append(
+            (position[audit_id], value, line_id, status)
+        )
 
     found = []
     for (branch_id, branch_code, item_id), hits in flagged.items():
@@ -322,49 +394,85 @@ def repeat_items(filters: DashboardFilters, min_streak: int = 2) -> list[dict]:
             found.append((branch_id, branch_code, item_id, best))
 
     items = Item.objects.in_bulk({item_id for _b, _c, item_id, _r in found})
-    last_queries = dict(
-        Query.objects.filter(line_id__in=[run[-1][2] for _b, _c, _i, run in found]).values_list(
-            "line_id", "id"
+    # The last 6 audits of each Branch (padded with None on the left) and the item's line in
+    # each of them, for the grid cells.
+    grid_audits = {}
+    for branch_id in {branch_id for branch_id, _c, _i, _r in found}:
+        last = branch_audits[branch_id][-GRID_AUDITS:]
+        grid_audits[branch_id] = [None] * (GRID_AUDITS - len(last)) + last
+    grid_lines = {
+        (line["audit_id"], line["item_id"]): line
+        for line in AuditLine.objects.filter(
+            audit_id__in=[audit["id"] for row in grid_audits.values() for audit in row if audit],
+            item_id__in=items,
+        ).values(
+            "audit_id",
+            "item_id",
+            "count_status",
+            "erp_qty",
+            "physical_qty",
+            "variance_qty",
+            "variance_value",
         )
-    )
-    rows = [
-        {
-            "branch_id": branch_id,
-            "branch_code": branch_code,
-            "item_id": item_id,
-            "item_code": items[item_id].code,
-            "description": items[item_id].description,
-            "streak": len(run),
-            "total_value": _money(sum((value for _p, value, _l in run), ZERO)),
-            "query_id": last_queries.get(run[-1][2]),
-        }
-        for branch_id, branch_code, item_id, run in found
-    ]
+    }
+    rows = []
+    for branch_id, branch_code, item_id, run in found:
+        item = items[item_id]
+        rows.append(
+            {
+                "branch_id": branch_id,
+                "branch_code": branch_code,
+                "item_id": item_id,
+                "item_code": item.code,
+                "description": item.description,
+                "uom": item.uom,
+                "streak": len(run),
+                "direction": _streak_direction({status for *_rest, status in run}),
+                "total_value": _money(sum((value for _p, value, _l, _s in run), ZERO)),
+                "cells": [
+                    _grid_cell(audit, audit and grid_lines.get((audit["id"], item_id)))
+                    for audit in grid_audits[branch_id]
+                ],
+            }
+        )
     rows.sort(
         key=lambda row: (-row["streak"], row["total_value"], row["branch_code"], row["item_code"])
     )
     return rows
 
 
+def grid_dates(filters: DashboardFilters) -> list | None:
+    """Dates of the last 6 counted audits (oldest first, None = no audit) when exactly one
+    Branch is picked, for the grid headers; None when several Branches are picked."""
+    if len(filters.branches) != 1:
+        return None
+    newest_first = filters.final_audits().order_by("-audit_date", "-id")
+    dates = list(newest_first.values_list("audit_date", flat=True)[:GRID_AUDITS])[::-1]
+    return [None] * (GRID_AUDITS - len(dates)) + dates
+
+
+def repeat_history(filters: DashboardFilters, branch_id: int, item_id: int):
+    """Every line of one item in the Branch's counted audits inside the filters, newest first
+    (OK and not counted too), for the repeat row's detail panel."""
+    return (
+        AuditLine.objects.filter(
+            audit__in=filters.final_audits().filter(branch_id=branch_id), item_id=item_id
+        )
+        .select_related("audit", "query")
+        .order_by("-audit__audit_date", "-audit_id")
+    )
+
+
 # ---------- Trend ----------
 
 
-def find_item(company, code: str):
-    code = code.strip()
-    if not code:
-        return None
-    return Item.objects.filter(company=company, code__iexact=code).first()
-
-
-def trend_rows(filters: DashboardFilters, branch=None, item=None) -> list[dict]:
+def trend_rows(filters: DashboardFilters, branch=None) -> list[dict]:
     """One point per audit (oldest first): excess, shortage, net and queries raised.
-    For an Item: only that item's line in each audit, across the picked Branches."""
+    With picked items, only their lines count and audits without any of them are skipped."""
     audits = filters.final_audits().select_related("branch").order_by("audit_date", "id")
     if branch is not None:
         audits = audits.filter(branch=branch)
     lines = counted_lines(filters).filter(audit__in=audits)
-    if item is not None:
-        lines = lines.filter(item=item)
     sums = {
         row["audit_id"]: row
         for row in lines.values("audit_id").annotate(**_excess_shortage(), queries=Count("query"))
@@ -373,8 +481,8 @@ def trend_rows(filters: DashboardFilters, branch=None, item=None) -> list[dict]:
     for audit in audits:
         row = sums.get(audit.pk)
         if row is None:
-            if item is not None:
-                continue  # the item was not counted in this audit
+            if filters.items:
+                continue  # none of the picked items was counted in this audit
             row = {"excess": ZERO, "shortage": ZERO, "queries": 0}
         rows.append(
             {

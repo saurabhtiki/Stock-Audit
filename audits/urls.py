@@ -19,6 +19,7 @@ urlpatterns = [
         dashboard_views.dashboard_detail,
         name="dashboard_detail",
     ),
+    path("dashboard/items/", dashboard_views.dashboard_item_search, name="dashboard_items"),
     path("dashboard/<str:tab>/", dashboard_views.dashboard, name="dashboard_tab"),
     path("audits/new/", views.audit_create, name="audit_create"),
     path("audits/erp-template/", views.erp_template, name="erp_template"),

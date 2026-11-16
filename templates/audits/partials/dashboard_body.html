@@ -17,6 +17,7 @@
         <li class="menu-title text-xs font-normal">None ticked = all Branches</li>
       </ul>
     </details>
+    {% include "audits/partials/dashboard_item_picker.html" %}
     <label class="flex flex-col text-xs" title="First month to include (by audit date)">
       From
       <input type="month" name="from" value="{{ filters.month_from|date:'Y-m' }}" class="input input-sm w-40">
@@ -37,12 +38,8 @@
         <input type="checkbox" class="checkbox checkbox-sm" name="cancelled" value="1" {% if show_cancelled %}checked{% endif %}> Show cancelled
       </label>
     {% endif %}
-    {% if tab == "trend" %}
-      {# Keep the trend choice when the filters change. #}
-      {% if item_code %}<input type="hidden" name="item" value="{{ item_code }}">{% elif trend_branch %}<input type="hidden" name="trend_branch" value="{{ trend_branch.pk }}">{% endif %}
-    {% endif %}
     <button type="submit" class="btn btn-sm btn-primary" title="Show the dashboard with these filters">Apply</button>
-    <a href="{{ request.path }}" hx-get="{{ request.path }}" hx-target="#dashboard" hx-push-url="true" class="btn btn-sm btn-ghost" title="Back to all Branches, last 12 months, all types">Reset</a>
+    <a href="{{ request.path }}" hx-get="{{ request.path }}" hx-target="#dashboard" hx-push-url="true" class="btn btn-sm btn-ghost" title="Back to all Branches, all items, last 12 months, all types">Reset</a>
   </div>
 </form>
 {% for error in filters.errors %}
@@ -60,7 +57,6 @@
 <section aria-live="polite">
   {% if tab == "status" %}{% include "audits/partials/dashboard_status_table.html" %}
   {% elif tab == "queries" %}{% include "audits/partials/dashboard_queries.html" %}
-  {% elif tab == "variance" %}{% include "audits/partials/dashboard_variance.html" %}
   {% elif tab == "repeat" %}{% include "audits/partials/dashboard_repeat.html" %}
   {% else %}{% include "audits/partials/dashboard_trend.html" %}{% endif %}
 </section>

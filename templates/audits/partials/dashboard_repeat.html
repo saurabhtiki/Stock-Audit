@@ -1,10 +1,18 @@
 <div class="card card-sm bg-base-100">
   <div class="card-body">
-    <h2 class="card-title">Repeat items <span class="badge badge-ghost">{{ table.page.paginator.count }}</span></h2>
+    <h2 class="card-title">Repeat items <span class="badge badge-ghost" title="Items in the list after your filters">{{ table.page.paginator.count }}</span></h2>
     <p class="text-sm text-base-content/70">
       Items that were Excess or Shortage in 2 or more audits in a row of the same Branch. An audit where the item was OK or not counted breaks the run.
-      Listed by Branch. Click the item to open its latest query, which shows its history across audits.
+      The 6 columns are the last 6 counted audits of that row's Branch, oldest on the left. Click a row to see every audit of that item.
     </p>
-    {% include "audits/partials/dashboard_repeat_table.html" %}
+    <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/70" aria-label="What the grid cells mean">
+      <span><b class="text-error">-12</b> short by 12</span>
+      <span><b class="text-info">+4</b> excess of 4</span>
+      <span><span class="grid-dot">·</span> counted, OK</span>
+      <span><span class="grid-dot">○</span> not counted</span>
+      <span><span class="grid-dot">–</span> item not in that audit</span>
+    </p>
+    {% include "audits/partials/dashboard_repeat_buttons.html" %}
+    {% include "audits/partials/dashboard_repeat_list.html" %}
   </div>
 </div>

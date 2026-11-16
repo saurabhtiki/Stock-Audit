@@ -1,0 +1,40 @@
+{# Item filter of the dashboard bar: pick many items, searched by code or description. #}
+{# Picked items go into the form as hidden `item` inputs. Alpine component: itemPicker (static/js/dashboard.js). #}
+{% if item_filter_used %}
+  {{ picked_items|json_script:"picked-items" }}
+  <details class="dropdown" x-data="itemPicker('picked-items')" @click.outside="$el.open = false">
+    <summary class="btn btn-sm btn-outline btn-primary" title="Pick which items to include. Type a code or part of a description to find them.">
+      Items: <span x-text="picked.length ? picked.length + ' picked' : 'All'">{% if picked_items %}{{ picked_items|length }} picked{% else %}All{% endif %}</span>
+    </summary>
+    <div class="dropdown-content z-20 mt-1 w-80 rounded-box bg-base-100 p-2 shadow">
+      <input type="search" name="q" form="item-search-only" class="input input-sm w-full" placeholder="Type item code or description…"
+             autocomplete="off" aria-label="Find items by code or description"
+             title="Type at least part of a code (e.g. ITM-0) or description (e.g. soap). Click a result to pick or unpick it."
+             hx-get="{% url 'audits:dashboard_items' %}" hx-trigger="input changed delay:300ms, focus once"
+             hx-target="next .item-results" hx-push-url="false" @keydown.enter.prevent>
+      <ul class="item-results menu menu-sm mt-1 max-h-60 w-full flex-nowrap overflow-y-auto p-0" aria-label="Matching items"></ul>
+      <div class="mt-2 flex flex-wrap gap-1" x-show="picked.length" x-cloak aria-label="Picked items">
+        <template x-for="item in picked" :key="item.id">
+          <span class="badge badge-primary badge-soft gap-1">
+            <span class="max-w-52 truncate" x-text="item.label" :title="item.label"></span>
+            <button type="button" class="cursor-pointer" @click="remove(item.id)" :aria-label="'Remove ' + item.label" title="Remove this item from the filter">✕</button>
+          </span>
+        </template>
+      </div>
+      <div class="mt-2 flex items-center justify-between text-xs text-base-content/60">
+        <span>None picked = all items</span>
+        <button type="button" class="link link-primary" x-show="picked.length" @click="clear()" title="Unpick every item">Clear all</button>
+      </div>
+      <p class="mt-1 text-xs text-base-content/60">Press <b>Apply</b> to use the picked items.</p>
+    </div>
+    <template x-for="item in picked" :key="item.id"><input type="hidden" name="item" :value="item.id"></template>
+  </details>
+{% else %}
+  {# Status lists audits, not items: keep the picked items for the other tabs, but show the filter as off. #}
+  <span class="tooltip tooltip-bottom" data-tip="Not used on this tab: the audit list is about whole audits, not items.">
+    <button type="button" class="btn btn-sm btn-outline btn-disabled" aria-disabled="true" tabindex="-1">
+      Items: {% if picked_items %}{{ picked_items|length }} picked{% else %}All{% endif %}
+    </button>
+  </span>
+  {% for item in picked_items %}<input type="hidden" name="item" value="{{ item.id }}">{% endfor %}
+{% endif %}

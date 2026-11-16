@@ -325,8 +325,6 @@ def test_repeat_items_streaks(admin_user, branches, north, south):
     rows = dashboards.repeat_items(filters_for(branches))
     assert [(r["branch_code"], r["item_code"], r["streak"]) for r in rows] == [("N1", "A1", 3)]
     assert rows[0]["total_value"] == Decimal(-25)
-    last_query = Query.objects.get(audit__title="N3", line__item_code="A1")
-    assert rows[0]["query_id"] == last_query.pk
 
 
 def test_repeat_tab_page(admin_client, admin_user, north):
@@ -352,8 +350,9 @@ def test_trend_for_branch_and_item(admin_user, branches, north, south, company_a
         ("N1 N-May", Decimal(0), 2),
         ("N1 N-Jun", Decimal(0), 0),
     ]
-    item = dashboards.find_item(company_a, "a1")
-    item_rows = dashboards.trend_rows(filters, item=item)
+    # Item filter: only A1's lines count, and audits without A1 are skipped.
+    item = Item.objects.get(company=company_a, code="A1")
+    item_rows = dashboards.trend_rows(filters_for(branches, item=str(item.pk)))
     assert [(r["label"], r["net"]) for r in item_rows] == [
         ("N1 N-May", Decimal(10)),
         ("S1 S-Jun", Decimal(-3)),
@@ -362,17 +361,21 @@ def test_trend_for_branch_and_item(admin_user, branches, north, south, company_a
 
 def test_trend_tab_unknown_item(admin_client, admin_user, north):
     make_audit(north, "N-May", timezone.localdate(), admin_user, lines=[("A1", 10, 20, 1)])
-    body = dash(admin_client, "trend", item="ZZZ").content.decode()
-    assert "No item “ZZZ”" in body
+    body = dash(admin_client, "trend", item="99999").content.decode()
+    assert "Some picked items were not found" in body
+    item = Item.objects.get(code="A1")
     csv_text = b"".join(
-        dash(admin_client, "trend", item="A1", export="csv").streaming_content
+        dash(
+            admin_client, "trend", item=str(item.pk), branch=str(north.pk), export="csv"
+        ).streaming_content
     ).decode("utf-8-sig")
     assert "N1 N-May" in csv_text
 
 
 def test_variance_tab_csv(admin_client, admin_user, north):
+    """Several Branches: the Trend tab gives the old Variance CSV (Branch × month)."""
     make_audit(north, "N-May", timezone.localdate(), admin_user, lines=[("A1", 10, 20, 1)])
-    csv_text = b"".join(dash(admin_client, "variance", export="csv").streaming_content).decode(
+    csv_text = b"".join(dash(admin_client, "trend", export="csv").streaming_content).decode(
         "utf-8-sig"
     )
     assert csv_text.splitlines()[0] == "Month,Branch,Excess value,Shortage value,Net variance"

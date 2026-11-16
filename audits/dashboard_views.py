@@ -1,12 +1,13 @@
-"""Dashboard page: one filter bar and five tabs (Phase 6). Numbers come from audits.dashboards."""
+"""Dashboard page: one filter bar and four tabs (Phase 6, 9). Numbers come from audits.dashboards."""
 
 import logging
 import re
 from datetime import timedelta
 from urllib.parse import urlencode
 
+from django.db.models import Q
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.cache import patch_vary_headers
@@ -21,7 +22,7 @@ from django_datatable import (
 )
 
 from audits import dashboards
-from audits.models import Action, Audit, AuditLine, Query
+from audits.models import Action, Audit, AuditLine, Item, Query
 from audits.permissions import branches_with_right, forbidden
 from audits.views import _is_htmx, _vary_on_htmx
 
@@ -36,10 +37,15 @@ TABS = (
         "Queries & actions",
         "How old the open queries are, and actions past their due date",
     ),
-    ("variance", "Variance", "Excess, shortage and net variance value by Branch and month"),
+    (
+        "trend",
+        "Trend",
+        "Excess, shortage and net variance over time: per audit for one Branch, per month for more",
+    ),
     ("repeat", "Repeat items", "Items with Excess / Shortage in 2 or more audits in a row"),
-    ("trend", "Trend", "Variance per audit over time, for one Branch or one item"),
 )
+# Tabs that use the Item filter (Status lists audits, so items mean nothing there).
+ITEM_FILTER_TABS = {"queries", "trend", "repeat"}
 TAB_NAMES = {name for name, _label, _tip in TABS}
 
 STATUS_COLUMNS = [
@@ -71,13 +77,46 @@ OVERDUE_COLUMNS = [
     ),
 ]
 
-REPEAT_COLUMNS = [
-    Column("branch_code", "Branch", type=CHOICE),
-    Column("item_code", "Item No"),
-    Column("description", "Description"),
-    Column("streak", "Audits in a row", type=NUMBER),
-    Column("total_value", "Total variance value", type=NUMBER),
-]
+CELL_LABELS = ("6th last", "5th last", "4th last", "3rd last", "2nd last", "Latest")
+CELL_CSV = {"ok": "OK", "not_counted": "Not counted", "missing": "Not in audit", "none": ""}
+MIN_STREAKS = (2, 3, 4)  # the Min streak quick buttons (4 = 4 or more)
+
+
+def _cell_csv(cell: dict):
+    """A grid cell in the CSV: the variance qty, or a word for OK / not counted / no line."""
+    if cell["state"] in ("short", "excess"):
+        return cell["qty"]
+    return CELL_CSV[cell["state"]]
+
+
+def _repeat_columns(dates: list | None) -> list[Column]:
+    """Branch, item, the 6 audit cells (real dates as headings when one Branch is picked),
+    streak and value."""
+    cells = [
+        Column(
+            f"cell{index}",
+            f"{dates[index]:%d %b %y}" if dates and dates[index] else label,
+            type=NUMBER,  # right-aligned heading, like the numbers under it
+            sortable=False,
+            filterable=False,
+            csv_value=lambda row, index=index: _cell_csv(row["cells"][index]),
+        )
+        for index, label in enumerate(CELL_LABELS)
+    ]
+    return [
+        Column("branch_code", "Branch", type=CHOICE),
+        Column("item_code", "Item No"),
+        Column("description", "Description"),
+        *cells,
+        Column(
+            "streak",
+            "Streak",
+            type=NUMBER,
+            csv_value=lambda row: f"{row['streak']} {row['direction']}",
+        ),
+        Column("total_value", "Streak value", type=NUMBER),
+    ]
+
 
 # Tables inside a dashboard tab: a click inside one redraws only that table.
 TABLE_TEMPLATES = {
@@ -193,16 +232,10 @@ def _add_detail_links(rows, filters, kind: str, make_params) -> None:
         row["detail_url"] = f"{base}?{urlencode(params)}"
 
 
-def _variance_context(request, filters):
-    rows = dashboards.variance_rows(filters)
-    _add_detail_links(
-        rows,
-        filters,
-        "variance",
-        lambda row: [("row_branch", row["branch_id"]), ("month", f"{row['month']:%Y-%m}")],
-    )
+def _variance_chart(rows) -> dict:
+    """Excess / Shortage bars and a Net line per month, all picked Branches added up."""
     by_month = dashboards.variance_by_month(rows)
-    chart = {
+    return {
         "type": "bar",
         "labels": [f"{total['month']:%b %y}" for total in by_month],
         "datasets": [
@@ -220,49 +253,11 @@ def _variance_context(request, filters):
             },
         ],
     }
-    return {"rows": rows, "by_month": by_month, "chart": chart}
 
 
-def _repeat_context(request, filters):
-    # Runs are found in Python, so the table works on those rows (RowsTable), not on SQL.
-    rows = sorted(
-        dashboards.repeat_items(filters),
-        # Grouped by Branch; inside a Branch the longest runs and biggest losses first.
-        key=lambda row: (row["branch_code"], -row["streak"], row["total_value"], row["item_code"]),
-    )
-    table = RowsTable(
-        request.GET,
-        rows,
-        REPEAT_COLUMNS,
-        table_id="repeat-table",
-        density_switch=True,
-        column_toggle=True,
-        border_toggle=True,
-        search_fields=("item_code", "description"),
-        search_placeholder="Search item code or description",
-        base_url=request.path,
-        noun="items",
-        keep=dashboards.FILTER_PARAMS,
-    )
-    return {"table": table}
-
-
-def _trend_context(request, filters):
-    """Pick a Branch (default: the first picked) or type an item code."""
-    item_code = request.GET.get("item", "").strip()
-    item = dashboards.find_item(request.company, item_code)
-    branch = None
-    if item is None:
-        wanted = request.GET.get("trend_branch", "")
-        branch = next((b for b in filters.branches if str(b.pk) == wanted), None)
-        if branch is None:
-            # Start on the Branch of the latest counted audit, so the chart isn't empty.
-            latest = filters.final_audits().order_by("-audit_date", "-id").first()
-            branch = latest.branch if latest else filters.branches[0]
-    rows = dashboards.trend_rows(filters, branch=branch, item=item)
-    if item is None:  # one item's trend has no ▸ (its rows are that one item already)
-        _add_detail_links(rows, filters, "trend", lambda row: [("audit", row["audit_id"])])
-    chart = {
+def _audit_chart(rows) -> dict:
+    """Excess / Shortage / Net lines per audit, with the queries raised as bars."""
+    return {
         "type": "line",
         "labels": [f"{row['label']} ({row['audit_date']:%d %b %y})" for row in rows],
         "datasets": [
@@ -282,22 +277,72 @@ def _trend_context(request, filters):
             },
         ],
     }
-    return {
-        "item_code": item_code,
-        "item": item,
-        "item_missing": bool(item_code) and item is None,
-        "trend_branch": branch,
-        "rows": rows,
-        "chart": chart,
-    }
+
+
+def _trend_context(request, filters):
+    """One Branch picked: one point per audit. More Branches: totals per month, with a
+    Branch × month table. Picked items narrow both to those items' lines."""
+    if len(filters.branches) == 1:
+        rows = dashboards.trend_rows(filters, branch=filters.branches[0])
+        _add_detail_links(rows, filters, "trend", lambda row: [("audit", row["audit_id"])])
+        return {"mode": "audit", "rows": rows, "chart": _audit_chart(rows)}
+    rows = dashboards.variance_rows(filters)
+    _add_detail_links(
+        rows,
+        filters,
+        "variance",
+        lambda row: [("row_branch", row["branch_id"]), ("month", f"{row['month']:%Y-%m}")],
+    )
+    return {"mode": "month", "rows": rows, "chart": _variance_chart(rows)}
+
+
+def _repeat_context(request, filters):
+    # Runs are found in Python, so the table works on those rows (RowsTable), not on SQL.
+    # Rows come longest streak first, then biggest loss.
+    rows = dashboards.repeat_items(filters)
+    _add_detail_links(
+        rows,
+        filters,
+        "repeat",
+        lambda row: [("row_branch", row["branch_id"]), ("row_item", row["item_id"])],
+    )
+    table = RowsTable(
+        request.GET,
+        rows,
+        _repeat_columns(dashboards.grid_dates(filters)),
+        table_id="repeat-table",
+        density_switch=True,
+        column_toggle=True,
+        border_toggle=True,
+        striped=False,  # each row has a hidden detail row under it, which would upset the stripes
+        search_fields=("item_code", "description"),
+        search_placeholder="Search item code or description",
+        base_url=request.path,
+        noun="items",
+        keep=dashboards.FILTER_PARAMS,
+    )
+    picked_min = request.GET.get("streak_min", "")
+    min_streaks = [
+        {
+            "label": f"{count}+" if count == MIN_STREAKS[-1] else str(count),
+            "tip": f"Only items with {count} or more audits in a row",
+            "url": table.url(
+                drop={"streak_min", "streak_max", "page"},
+                add=[("streak_min", str(count))] if count > MIN_STREAKS[0] else [],
+            ),
+            "active": picked_min == (str(count) if count > MIN_STREAKS[0] else "")
+            and not request.GET.get("streak_max"),
+        }
+        for count in MIN_STREAKS
+    ]
+    return {"table": table, "min_streaks": min_streaks}
 
 
 CONTEXT_BUILDERS = {
     "status": _status_context,
     "queries": _queries_context,
-    "variance": _variance_context,
-    "repeat": _repeat_context,
     "trend": _trend_context,
+    "repeat": _repeat_context,
 }
 
 
@@ -311,7 +356,9 @@ def _csv(tab: str, context: dict):
             ["Branch", *(f"{label} days" for label in context["age_labels"]), "Total open"],
             [[r["branch"], *r["buckets"], r["total"]] for r in context["ageing"]],
         )
-    if tab == "variance":
+    if tab == "repeat":
+        return context["table"].csv_response(_csv_name(tab))
+    if context["mode"] == "month":
         return rows_csv_response(
             _csv_name(tab),
             ["Month", "Branch", "Excess value", "Shortage value", "Net variance"],
@@ -320,8 +367,6 @@ def _csv(tab: str, context: dict):
                 for r in context["rows"]
             ],
         )
-    if tab == "repeat":
-        return context["table"].csv_response(_csv_name(tab))
     return rows_csv_response(
         _csv_name(tab),
         [
@@ -364,6 +409,11 @@ def _report_branches(request):
 
 
 def dashboard(request, tab: str = "status"):
+    if tab == "variance":  # merged into Trend (Phase 9); old bookmarks still work
+        query = request.GET.urlencode()
+        return redirect(
+            reverse("audits:dashboard_tab", args=["trend"]) + (f"?{query}" if query else "")
+        )
     if tab not in TAB_NAMES:
         _not_found(request, "No such dashboard tab.")
     allowed = _report_branches(request)
@@ -394,6 +444,8 @@ def dashboard(request, tab: str = "status"):
         filters=filters,
         filter_query=filter_query,
         audit_types=Audit.Type.choices,
+        item_filter_used=tab in ITEM_FILTER_TABS,
+        picked_items=[{"id": str(item.pk), "label": _item_label(item)} for item in filters.items],
         # Same page and choices (filters, trend Branch / item), as a CSV download.
         csv_url=request.path
         + "?"
@@ -419,7 +471,37 @@ def dashboard(request, tab: str = "status"):
     return response
 
 
-DETAIL_KINDS = ("variance", "trend")
+def _item_label(item) -> str:
+    return f"{item.code} – {item.description}" if item.description else item.code
+
+
+ITEM_SEARCH_LIMIT = 20
+
+
+def dashboard_item_search(request):
+    """Items whose code or description contains the typed text, for the Item filter (htmx)."""
+    if not _report_branches(request):
+        return forbidden(request, NO_REPORTS_RIGHT)
+    text = request.GET.get("q", "").strip()
+    items = Item.objects.filter(company=request.company)
+    if text:
+        items = items.filter(Q(code__icontains=text) | Q(description__icontains=text))
+    items = list(items.order_by("code")[: ITEM_SEARCH_LIMIT + 1])
+    return render(
+        request,
+        "audits/partials/dashboard_item_options.html",
+        {
+            "options": [
+                {"id": str(item.pk), "label": _item_label(item)}
+                for item in items[:ITEM_SEARCH_LIMIT]
+            ],
+            "more": len(items) > ITEM_SEARCH_LIMIT,
+            "text": text,
+        },
+    )
+
+
+DETAIL_KINDS = ("variance", "trend", "repeat")
 
 
 def _detail_problem(request, message: str, status: int = 400):
@@ -445,6 +527,8 @@ def dashboard_detail(request, kind: str):
     filters = dashboards.read_filters(request.GET, allowed)
     context = {"kind": kind}
 
+    if kind == "repeat":
+        return _repeat_detail(request, filters)
     if kind == "variance":
         branch_id = _int_param(request.GET, "row_branch")
         if branch_id not in filters.branch_ids:
@@ -476,6 +560,20 @@ def dashboard_detail(request, kind: str):
     response = render(request, template, context)
     patch_vary_headers(response, ["HX-Target"])
     return response
+
+
+def _repeat_detail(request, filters):
+    """Every audit of one item in one Branch (the repeat row's panel), newest first."""
+    branch_id = _int_param(request.GET, "row_branch")
+    if branch_id not in filters.branch_ids:
+        return _detail_problem(
+            request, "This Branch is not in your dashboard filters, so its rows are hidden."
+        )
+    item_id = _int_param(request.GET, "row_item")
+    if item_id is None or not Item.objects.filter(pk=item_id, company=request.company).exists():
+        return _detail_problem(request, "This item is not in this company.")
+    lines = dashboards.repeat_history(filters, branch_id, item_id)
+    return render(request, "audits/partials/dashboard_repeat_detail.html", {"lines": lines})
 
 
 BOX_ID = re.compile(r"[a-z]+-detail-\d+")

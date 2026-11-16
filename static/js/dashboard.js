@@ -98,4 +98,29 @@
   document.body.addEventListener("htmx:afterSettle", function (event) {
     drawCharts(event.target);
   });
+
+  // Item filter (dashboard_item_picker.html): the picked items, as [{id, label}].
+  // `sourceId` is the <script type="application/json"> holding the items picked so far.
+  function itemPicker(sourceId) {
+    var source = document.getElementById(sourceId);
+    return {
+      picked: source ? JSON.parse(source.textContent) : [],
+      has: function (id) {
+        return this.picked.some(function (item) { return item.id === String(id); });
+      },
+      toggle: function (id, label) {
+        if (this.has(id)) this.remove(id);
+        else this.picked.push({ id: String(id), label: label });
+      },
+      remove: function (id) {
+        this.picked = this.picked.filter(function (item) { return item.id !== String(id); });
+      },
+      clear: function () {
+        this.picked = [];
+      },
+    };
+  }
+  // This script runs before Alpine starts (Alpine is deferred), but register safely either way.
+  if (window.Alpine) window.Alpine.data("itemPicker", itemPicker);
+  else document.addEventListener("alpine:init", function () { window.Alpine.data("itemPicker", itemPicker); });
 })();
