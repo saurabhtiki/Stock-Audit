@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Pending actions{% endblock %}
+{% block content %}
+{# Opened from a number in the dashboard's Pending actions / Actions by owner tables (dashboard_views.dashboard_actions). #}
+<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-bold">Pending actions <span class="text-base font-normal text-base-content/60">{{ current_company.name }}</span></h1>
+  <a href="{{ back_url }}" class="btn btn-sm btn-ghost" title="Back to the Queries & actions tab, with the same filters">← Dashboard</a>
+</div>
+<p class="mb-4 text-sm text-base-content/70">
+  Actions not yet Verified, for audits from <b>{{ filters.month_from|date:"M Y" }}</b> to <b>{{ filters.month_to|date:"M Y" }}</b>{% if filters.audit_type %} (type: {{ filters.audit_type }}){% endif %}{% if filters.items %} · items: {% for item in filters.items %}{{ item.code }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}.
+  Use the chips and filters on the table to widen or narrow the list. A red “Days late” means the due date has passed.
+</p>
+<div class="card card-sm bg-base-100">
+  <div class="card-body">
+    {% include "audits/partials/dashboard_overdue_table.html" %}
+  </div>
+</div>
+{% endblock %}

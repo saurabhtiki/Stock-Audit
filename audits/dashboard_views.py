@@ -188,30 +188,9 @@ def _ageing_link(filters, branch_code: str, low=None, high=None, today=None) -> 
     return f"{reverse('audits:query_list')}?{urlencode(params)}"
 
 
-def _queries_context(request, filters):
-    age_labels = [label for label, _low, _high in dashboards.AGE_BUCKETS]
-    ageing = dashboards.ageing_rows(filters)
-    for row in ageing:
-        row["cells"] = [
-            {"count": count, "url": _ageing_link(filters, row["branch"], low, high)}
-            for count, (_label, low, high) in zip(row["buckets"], dashboards.AGE_BUCKETS)
-        ]
-        row["total_url"] = _ageing_link(filters, row["branch"])
-    chart = {
-        "type": "bar",
-        "stacked": True,
-        "integer": True,
-        "labels": [row["branch"] for row in ageing],
-        "datasets": [
-            {
-                "label": f"{label} days",
-                "data": [row["buckets"][i] for row in ageing],
-                "color": f"age{i}",
-            }
-            for i, label in enumerate(age_labels)
-        ],
-    }
-    table = DataTable(
+def _pending_table(request, filters):
+    """Every action not yet Verified (dashboard Action list and the Pending actions page)."""
+    return DataTable(
         request.GET,
         dashboards.pending_actions(filters),
         PENDING_COLUMNS,
@@ -237,6 +216,32 @@ def _queries_context(request, filters):
             ),
         ],
     )
+
+
+def _queries_context(request, filters):
+    age_labels = [label for label, _low, _high in dashboards.AGE_BUCKETS]
+    ageing = dashboards.ageing_rows(filters)
+    for row in ageing:
+        row["cells"] = [
+            {"count": count, "url": _ageing_link(filters, row["branch"], low, high)}
+            for count, (_label, low, high) in zip(row["buckets"], dashboards.AGE_BUCKETS)
+        ]
+        row["total_url"] = _ageing_link(filters, row["branch"])
+    chart = {
+        "type": "bar",
+        "stacked": True,
+        "integer": True,
+        "labels": [row["branch"] for row in ageing],
+        "datasets": [
+            {
+                "label": f"{label} days",
+                "data": [row["buckets"][i] for row in ageing],
+                "color": f"age{i}",
+            }
+            for i, label in enumerate(age_labels)
+        ],
+    }
+    table = _pending_table(request, filters)
     late_tip = "Only the actions whose due date has passed"
     late_link = {
         "label": "Overdue only",
@@ -245,9 +250,11 @@ def _queries_context(request, filters):
         "active": request.GET.getlist("overdue") == [dashboards.OVERDUE],
     }
 
+    actions_page = reverse("audits:dashboard_actions")
+
     def drill(**picked) -> str:
-        """Link that redraws the action table for one Branch / owner and status."""
-        return request.path + table.url(drop=DRILL_PARAMS, add=list(picked.items()))
+        """Link to the Pending actions page, showing one Branch / owner and status."""
+        return actions_page + table.url(drop=DRILL_PARAMS, add=list(picked.items()))
 
     pending = dashboards.pending_action_rows(filters)
     for row in pending:
@@ -642,6 +649,31 @@ def dashboard(request, tab: str = "status"):
         )
         tab_urls = {item["name"]: item["url"] for item in context["tabs"]}
         context["kpis"] = _kpi_tiles(dashboards.kpis(filters), tab_urls)
+    response = _vary_on_htmx(render(request, template, context))
+    patch_vary_headers(response, ["HX-Target"])
+    return response
+
+
+def dashboard_actions(request):
+    """The pending actions behind one number of the Pending actions / owner tables."""
+    allowed = _report_branches(request)
+    if not allowed:
+        return forbidden(request, NO_REPORTS_RIGHT)
+    filters = dashboards.read_filters(request.GET, allowed)
+    table = _pending_table(request, filters)
+    if request.GET.get("export") == "csv":
+        logger.info("%s downloaded the pending actions CSV", request.user.username)
+        return table.csv_response(_csv_name("pending_actions"))
+    if _is_htmx(request) and request.headers.get("HX-Target") == "overdue-table":
+        template = TABLE_TEMPLATES["overdue-table"]
+    else:
+        template = "audits/dashboard_actions.html"
+    filter_query = urlencode(filters.as_params())
+    context = {
+        "table": table,
+        "filters": filters,
+        "back_url": f"{reverse('audits:dashboard_tab', args=['queries'])}?{filter_query}",
+    }
     response = _vary_on_htmx(render(request, template, context))
     patch_vary_headers(response, ["HX-Target"])
     return response

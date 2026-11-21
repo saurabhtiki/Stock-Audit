@@ -56,7 +56,7 @@
         <h2 class="card-title flex-1">Pending actions <span class="badge {% if pending_total %}badge-warning{% else %}badge-ghost{% endif %}" title="Actions not yet Verified">{{ pending_total }}</span>{% if pending_overdue %} <span class="badge badge-error" title="Past their due date">{{ pending_overdue }} overdue</span>{% endif %}</h2>
         {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=summary" csv_tip="Download pending actions per Branch as CSV" %}
       </div>
-      <p class="text-sm text-base-content/70">Actions not yet Verified: <b>Open</b> = not done yet; <b>Waiting to verify</b> = owner marked it Done, nobody has checked it. Click any number to see those actions in the table below.</p>
+      <p class="text-sm text-base-content/70">Actions not yet Verified: <b>Open</b> = not done yet; <b>Waiting to verify</b> = owner marked it Done, nobody has checked it. Click any number to open those actions.</p>
       {% if pending_total %}
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div class="h-64"><canvas data-chart="pending-chart" aria-label="Pending actions per Branch"></canvas></div>
@@ -78,7 +78,7 @@
 
         <h3 class="mt-2 font-bold">Actions by owner <span class="text-sm font-normal text-base-content/60">most overdue first</span></h3>
         <div class="flex items-center gap-2">
-          <p class="flex-1 text-sm text-base-content/70">Who is holding the pending actions. Click a number to see that person's actions below.</p>
+          <p class="flex-1 text-sm text-base-content/70">Who is holding the pending actions. Click a number to open that person's actions.</p>
           {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=owners" csv_tip="Download pending actions per owner as CSV" %}
         </div>
         <div class="max-h-72 overflow-auto">

@@ -8,10 +8,12 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.rights import Role
 from audits import dashboards
 from audits.models import Action, Item, Query
 
-from .conftest import make_user
+from .conftest import client_for, make_user
+from .test_audits import grant
 from .test_dashboards_backup import dash, filters_for, make_audit, north, south
 
 TODAY = timezone.localdate()
@@ -98,11 +100,32 @@ def test_queries_tab_shows_all_pending_and_drill_links(admin_client, actions):
     assert "all verified" not in page
     assert "Pending actions" in page and "Actions by owner" in page
     code = actions["north"].code
+    actions_page = reverse("audits:dashboard_actions")
+    assert f'href="{actions_page}?' in page  # numbers open the Pending actions page
     assert f"branch_code={code}&amp;overdue=yes" in page  # Overdue number of North
 
 
-def test_drill_down_redraws_only_the_table(admin_client, actions):
-    url = reverse("audits:dashboard_tab", args=["queries"])
+def test_number_opens_pending_actions_page(admin_client, actions):
+    url = reverse("audits:dashboard_actions")
+    code = actions["north"].code
+    page = admin_client.get(url, {"branch_code": code, "overdue": "yes"}).content.decode()
+    assert "<h1" in page and "Pending actions" in page and "← Dashboard" in page
+    assert "late open" in page and "late done" in page
+    assert "future open" not in page and "south job" not in page
+    by_owner = admin_client.get(url, {"owner_name": "Ravi"}).content.decode()
+    assert "south job" in by_owner and "late open" not in by_owner
+    csv = csv_lines(admin_client.get(url, {"export": "csv", "branch_code": code}))
+    assert len(csv) == 5  # header + North's 4 pending
+
+
+def test_pending_actions_page_needs_reports_right(actions, branches, company_a):
+    user = make_user("cora")
+    grant(user, branches[0], company_a, role=Role.AUDITOR, count_and_remarks=True)
+    assert client_for(user).get(reverse("audits:dashboard_actions")).status_code == 403
+
+
+def test_action_table_redraws_alone(admin_client, actions):
+    url = reverse("audits:dashboard_actions")
     code = actions["north"].code
     part = admin_client.get(
         url,
