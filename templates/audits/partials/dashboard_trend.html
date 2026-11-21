@@ -67,3 +67,36 @@
     {% endif %}
   </div>
 </div>
+
+{# Top 10 loss items (Phase 10): biggest total shortage value in the picked Branches and months. #}
+<div class="card card-sm mt-4 bg-base-100">
+  <div class="card-body">
+    <div class="flex items-center gap-2">
+      <h2 class="card-title flex-1">Top {{ top_loss|length|default:"10" }} loss items <span class="text-sm font-normal text-base-content/60">biggest shortage value</span></h2>
+      {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=toploss" csv_tip="Download the top loss items as CSV" %}
+    </div>
+    <p class="text-sm text-base-content/70">Items that cost the most in shortages across the picked Branches and months (counted audits only). Click ▸ to see every audit of the item.</p>
+    {% if top_loss %}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th class="w-8"><span class="sr-only">Details</span></th><th>#</th><th>Item No</th><th>Description</th><th class="text-right" title="How many audit lines were Shortage">Times short</th><th class="text-right" title="Total shortage value">Shortage value</th></tr></thead>
+          {% for row in top_loss %}
+            <tbody x-data="{ open: false }">
+              <tr>
+                <td>{% include "audits/partials/dashboard_expander.html" with detail_url=row.detail_url detail_id=row.detail_id expander_tip="Show every audit of this item" %}</td>
+                <td class="text-base-content/60">{{ forloop.counter }}</td>
+                <td class="font-bold">{{ row.item_code }}</td>
+                <td class="max-w-xs truncate" title="{{ row.description }}">{{ row.description }}</td>
+                <td class="text-right">{{ row.times }}</td>
+                <td class="text-right font-bold text-error">{{ row.shortage|floatformat:2|intcomma }}</td>
+              </tr>
+              <tr x-show="open" x-cloak><td colspan="6" class="bg-base-200 p-3"><div id="{{ row.detail_id }}" data-drilldown><span class="loading loading-spinner loading-sm"></span> Loading…</div></td></tr>
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    {% else %}
+      <div role="alert" class="alert alert-soft alert-success py-2 text-sm"><span>No shortages for these filters.</span></div>
+    {% endif %}
+  </div>
+</div>

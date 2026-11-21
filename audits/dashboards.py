@@ -11,6 +11,8 @@ from datetime import date
 from decimal import Decimal
 
 from django.db.models import (
+    Case,
+    CharField,
     Count,
     DateField,
     DecimalField,
@@ -22,6 +24,7 @@ from django.db.models import (
     Subquery,
     Sum,
     Value,
+    When,
 )
 from django.db.models.functions import Abs, Coalesce, NullIf, TruncMonth
 from django.utils import timezone
@@ -49,6 +52,7 @@ AGE_BUCKETS = (
 )
 DEFAULT_MONTHS = 12
 FILTER_PARAMS = ("branch", "from", "to", "type", "item")
+OVERDUE, NOT_LATE = "yes", "no"  # pending_actions().overdue
 MAX_PICKED_ITEMS = 50  # more than this in the Item filter is ignored (keeps URLs short)
 
 
@@ -231,30 +235,101 @@ def ageing_rows(filters: DashboardFilters, today: date | None = None) -> list[di
     ]
 
 
-def overdue_actions(filters: DashboardFilters, today: date | None = None):
-    """Actions past their due date and not Verified, oldest due date first. "Done" actions
-    stay in the list until someone verifies them (the screen marks them "waiting to verify").
-    Each row gets branch_code, audit_title, item_code, owner_name and days_late."""
+def pending_actions(filters: DashboardFilters, today: date | None = None):
+    """Actions not yet Verified (Open, or Done and waiting to verify), from queries raised by
+    an audit inside the filters. Each row gets branch_code, audit_title, item_code,
+    owner_name, overdue ("yes" = due date passed) and days_late (negative = not due yet)."""
     today = today or timezone.localdate()
-    actions = Action.objects.filter(query__audit__in=filters.final_audits(), due_date__lt=today)
+    actions = Action.objects.filter(query__audit__in=filters.final_audits())
     if filters.items:
         actions = actions.filter(query__item__in=filters.item_ids)
-    return (
-        actions.exclude(status=Action.Status.VERIFIED)
-        .annotate(
-            branch_code=F("query__audit__branch__code"),
-            audit_title=F("query__audit__title"),
-            item_code=F("query__line__item_code"),
-            # Full name, or the username when the full name is blank.
-            owner_name=Coalesce(NullIf(F("owner__full_name"), Value("")), F("owner__username")),
-            # Bigger number = longer late; sorting on it is the same as on the due date.
-            days_late=ExpressionWrapper(
-                Value(today, output_field=DateField()) - F("due_date"),
-                output_field=DurationField(),
-            ),
-        )
-        .order_by("due_date", "id")
+    return actions.exclude(status=Action.Status.VERIFIED).annotate(
+        branch_code=F("query__audit__branch__code"),
+        audit_title=F("query__audit__title"),
+        item_code=F("query__line__item_code"),
+        # Full name, or the username when the full name is blank.
+        owner_name=Coalesce(NullIf(F("owner__full_name"), Value("")), F("owner__username")),
+        overdue=Case(
+            When(due_date__lt=today, then=Value(OVERDUE)),
+            default=Value(NOT_LATE),
+            output_field=CharField(),
+        ),
+        # Bigger number = longer late; sorting on it is the same as on the due date.
+        days_late=ExpressionWrapper(
+            Value(today, output_field=DateField()) - F("due_date"),
+            output_field=DurationField(),
+        ),
     )
+
+
+def overdue_actions(filters: DashboardFilters, today: date | None = None):
+    """Pending actions whose due date has passed, oldest due date first."""
+    return pending_actions(filters, today).filter(overdue=OVERDUE).order_by("due_date", "id")
+
+
+def _action_counts(today: date) -> dict:
+    # "Overdue" counts on the due date itself: an aggregate filtered on the `overdue`
+    # annotation comes back 0 on SQLite.
+    return {
+        "open": Count("id", filter=Q(status=Action.Status.OPEN)),
+        "waiting": Count("id", filter=Q(status=Action.Status.DONE)),
+        "overdue": Count("id", filter=Q(due_date__lt=today)),
+        "total": Count("id"),
+    }
+
+
+def pending_action_rows(filters: DashboardFilters, today: date | None = None) -> list[dict]:
+    """Per Branch: pending actions split into Open / Waiting to verify, and how many are late.
+    Every picked Branch gets a row, also with 0."""
+    today = today or timezone.localdate()
+    found = {
+        row["branch_code"]: row
+        for row in pending_actions(filters, today)
+        .order_by()
+        .values("branch_code")
+        .annotate(**_action_counts(today))
+    }
+    empty = {"open": 0, "waiting": 0, "overdue": 0, "total": 0}
+    return [{"branch": branch.code, **found.get(branch.code, empty)} for branch in filters.branches]
+
+
+def owner_rows(filters: DashboardFilters, today: date | None = None) -> list[dict]:
+    """Per owner: pending actions, most overdue first (spots people with too much on them)."""
+    today = today or timezone.localdate()
+    rows = (
+        pending_actions(filters, today)
+        .order_by()
+        .values("owner_name")
+        .annotate(**_action_counts(today))
+    )
+    return sorted(rows, key=lambda row: (-row["overdue"], -row["total"], row["owner_name"]))
+
+
+def closing_speed(filters: DashboardFilters) -> list[dict]:
+    """Per Branch: queries Closed (raised by an audit inside the filters), and the average
+    and slowest days from raised to closed. Branches with nothing closed are left out."""
+    queries = Query.objects.filter(
+        audit__in=filters.final_audits(), status=Query.Status.CLOSED, closed_at__isnull=False
+    )
+    if filters.items:
+        queries = queries.filter(item__in=filters.item_ids)
+    days: dict = defaultdict(list)
+    for code, created_at, closed_at in queries.values_list(
+        "audit__branch__code", "created_at", "closed_at"
+    ):
+        days[code].append(
+            (timezone.localtime(closed_at).date() - timezone.localtime(created_at).date()).days
+        )
+    return [
+        {
+            "branch": branch.code,
+            "closed": len(days[branch.code]),
+            "avg_days": round(sum(days[branch.code]) / len(days[branch.code]), 1),
+            "max_days": max(days[branch.code]),
+        }
+        for branch in filters.branches
+        if days.get(branch.code)
+    ]
 
 
 # ---------- Variance ----------
@@ -315,6 +390,58 @@ def variance_by_month(rows: list[dict]) -> list[dict]:
     for total in totals.values():
         total["net"] = total["excess"] - total["shortage"]
     return sorted(totals.values(), key=lambda total: total["month"])
+
+
+TOP_LOSS_ITEMS = 10
+
+
+def top_loss_items(filters: DashboardFilters, limit: int = TOP_LOSS_ITEMS) -> list[dict]:
+    """The items with the biggest total shortage value in the picked Branches and months
+    (Shortage lines only), biggest loss first."""
+    rows = (
+        counted_lines(filters)
+        .filter(count_status=AuditLine.Status.SHORTAGE)
+        .order_by()
+        .values("item_id", "item__code", "item__description")
+        .annotate(times=Count("id"), shortage=-Sum("variance_value"))
+        .order_by("-shortage", "item__code")[:limit]
+    )
+    return [
+        {
+            "item_id": row["item_id"],
+            "item_code": row["item__code"],
+            "description": row["item__description"],
+            "times": row["times"],
+            "shortage": _money(row["shortage"]),
+        }
+        for row in rows
+    ]
+
+
+# ---------- Headline numbers (KPI tiles above the tabs) ----------
+
+
+def kpis(filters: DashboardFilters, today: date | None = None) -> dict:
+    """The few numbers shown as tiles on every tab, each the same as on its own tab."""
+    today = today or timezone.localdate()
+    audits = status_rows(filters)
+    audit_totals = audits.aggregate(
+        total=Count("id"), done=Count("id", filter=Q(stage__in=QUERY_STAGES))
+    )
+    percents = [pct for pct in audits.values_list("pct_counted", flat=True) if pct is not None]
+    actions = pending_actions(filters, today).aggregate(
+        total=Count("id"), overdue=Count("id", filter=Q(due_date__lt=today))
+    )
+    variance = counted_lines(filters).aggregate(**_excess_shortage())
+    return {
+        "audits": audit_totals["total"],
+        "audits_done": audit_totals["done"],
+        "avg_counted": round(sum(percents) / len(percents)) if percents else None,
+        "open_queries": open_queries(filters).count(),
+        "pending_actions": actions["total"],
+        "overdue_actions": actions["overdue"],
+        "net_variance": _money(variance["excess"]) - _money(variance["shortage"]),
+    }
 
 
 # ---------- Repeat items ----------
@@ -451,14 +578,16 @@ def grid_dates(filters: DashboardFilters) -> list | None:
     return [None] * (GRID_AUDITS - len(dates)) + dates
 
 
-def repeat_history(filters: DashboardFilters, branch_id: int, item_id: int):
-    """Every line of one item in the Branch's counted audits inside the filters, newest first
-    (OK and not counted too), for the repeat row's detail panel."""
+def repeat_history(filters: DashboardFilters, branch_id: int | None, item_id: int):
+    """Every line of one item in the counted audits inside the filters, newest first (OK and
+    not counted too), for the repeat row and top-loss row panels. branch_id None = every
+    picked Branch."""
+    audits = filters.final_audits()
+    if branch_id is not None:
+        audits = audits.filter(branch_id=branch_id)
     return (
-        AuditLine.objects.filter(
-            audit__in=filters.final_audits().filter(branch_id=branch_id), item_id=item_id
-        )
-        .select_related("audit", "query")
+        AuditLine.objects.filter(audit__in=audits, item_id=item_id)
+        .select_related("audit__branch", "query")
         .order_by("-audit__audit_date", "-audit_id")
     )
 

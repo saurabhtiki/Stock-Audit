@@ -1,33 +1,113 @@
-<div class="grid gap-4">
-  <div class="card card-sm bg-base-100">
-    <div class="card-body">
-      <div class="flex items-center gap-2">
-        <h2 class="card-title flex-1">Open queries by age <span class="text-sm font-normal text-base-content/60" title="Days since the query was raised at Checking Done">(days since raised)</span></h2>
-        {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url csv_tip="Download this ageing table as CSV" %}
-      </div>
-      {% if ageing %}
-        <div class="h-64"><canvas data-chart="ageing-chart" aria-label="Open queries by age, per Branch"></canvas></div>
-        {{ ageing_chart|json_script:"ageing-chart" }}
-        <div class="overflow-x-auto">
-          <table class="table table-sm table-zebra">
-            <thead><tr><th>Branch</th>{% for label in age_labels %}<th class="text-right">{{ label }} days</th>{% endfor %}<th class="text-right">Total open</th></tr></thead>
-            <tbody>
-              {% for row in ageing %}
-                <tr><td class="font-bold">{{ row.branch }}</td>{% for cell in row.cells %}<td class="text-right {% if forloop.counter > 3 and cell.count %}font-bold text-error{% endif %}">{% if cell.count %}<a class="link" href="{{ cell.url }}" title="Open these {{ cell.count }} queries in the Queries list (Branch, age, audit dates and type filled in)">{{ cell.count }}</a>{% else %}0{% endif %}</td>{% endfor %}<td class="text-right font-bold">{% if row.total %}<a class="link" href="{{ row.total_url }}" title="Open all {{ row.total }} open queries of {{ row.branch }} in the Queries list">{{ row.total }}</a>{% else %}0{% endif %}</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+<div class="grid grid-cols-1 gap-4">
+  <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <div class="card card-sm bg-base-100 xl:col-span-2">
+      <div class="card-body">
+        <div class="flex items-center gap-2">
+          <h2 class="card-title flex-1">Open queries by age <span class="text-sm font-normal text-base-content/60" title="Days since the query was raised at Checking Done">(days since raised)</span></h2>
+          {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url csv_tip="Download this ageing table as CSV" %}
         </div>
-      {% endif %}
+        {% if ageing %}
+          <div class="h-64"><canvas data-chart="ageing-chart" aria-label="Open queries by age, per Branch"></canvas></div>
+          {{ ageing_chart|json_script:"ageing-chart" }}
+          <div class="overflow-x-auto">
+            <table class="table table-sm table-zebra">
+              <thead><tr><th>Branch</th>{% for label in age_labels %}<th class="text-right">{{ label }} days</th>{% endfor %}<th class="text-right">Total open</th></tr></thead>
+              <tbody>
+                {% for row in ageing %}
+                  <tr><td class="font-bold">{{ row.branch }}</td>{% for cell in row.cells %}<td class="text-right {% if forloop.counter > 3 and cell.count %}font-bold text-error{% endif %}">{% if cell.count %}<a class="link" href="{{ cell.url }}" title="Open these {{ cell.count }} queries in the Queries list (Branch, age, audit dates and type filled in)">{{ cell.count }}</a>{% else %}0{% endif %}</td>{% endfor %}<td class="text-right font-bold">{% if row.total %}<a class="link" href="{{ row.total_url }}" title="Open all {{ row.total }} open queries of {{ row.branch }} in the Queries list">{{ row.total }}</a>{% else %}0{% endif %}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card card-sm bg-base-100">
+      <div class="card-body">
+        <div class="flex items-center gap-2">
+          <h2 class="card-title flex-1">Query closing speed</h2>
+          {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=speed" csv_tip="Download the closing speed per Branch as CSV" %}
+        </div>
+        <p class="text-sm text-base-content/70">Days from raised to Closed, for queries of these audits that are Closed. Lower is better.</p>
+        {% if speed %}
+          <div class="h-40"><canvas data-chart="speed-chart" aria-label="Average days to close a query, per Branch"></canvas></div>
+          {{ speed_chart|json_script:"speed-chart" }}
+          <div class="overflow-x-auto">
+            <table class="table table-sm table-zebra">
+              <thead><tr><th>Branch</th><th class="text-right" title="Queries Closed">Closed</th><th class="text-right" title="Average days from raised to Closed">Avg days</th><th class="text-right" title="The query that took longest to close">Slowest</th></tr></thead>
+              <tbody>
+                {% for row in speed %}
+                  <tr><td class="font-bold">{{ row.branch }}</td><td class="text-right">{{ row.closed }}</td><td class="text-right font-bold">{{ row.avg_days }}</td><td class="text-right {% if row.max_days > 30 %}text-error{% endif %}">{{ row.max_days }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div role="alert" class="alert alert-soft alert-info py-2 text-sm"><span>No Closed queries for these filters yet.</span></div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
   <div class="card card-sm bg-base-100">
     <div class="card-body">
       <div class="flex items-center gap-2">
-        <h2 class="card-title flex-1">Overdue actions <span class="badge {% if table.page.paginator.count %}badge-error{% else %}badge-ghost{% endif %}">{{ table.page.paginator.count }}</span></h2>
+        <h2 class="card-title flex-1">Pending actions <span class="badge {% if pending_total %}badge-warning{% else %}badge-ghost{% endif %}" title="Actions not yet Verified">{{ pending_total }}</span>{% if pending_overdue %} <span class="badge badge-error" title="Past their due date">{{ pending_overdue }} overdue</span>{% endif %}</h2>
+        {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=summary" csv_tip="Download pending actions per Branch as CSV" %}
       </div>
-      <p class="text-sm text-base-content/70">Due date passed and not yet Verified. “Done – waiting to verify” means the owner finished it but nobody has checked it yet; click “Open” to hide those.</p>
+      <p class="text-sm text-base-content/70">Actions not yet Verified: <b>Open</b> = not done yet; <b>Waiting to verify</b> = owner marked it Done, nobody has checked it. Click any number to see those actions in the table below.</p>
+      {% if pending_total %}
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div class="h-64"><canvas data-chart="pending-chart" aria-label="Pending actions per Branch"></canvas></div>
+          {{ pending_chart|json_script:"pending-chart" }}
+          <div class="overflow-x-auto">
+            <table class="table table-sm table-zebra">
+              <thead><tr><th>Branch</th><th class="text-right">Open</th><th class="text-right">Waiting to verify</th><th class="text-right">Total</th><th class="text-right" title="Of these, how many are past their due date">Overdue</th></tr></thead>
+              <tbody>
+                {% for row in pending %}
+                  <tr>
+                    <td class="font-bold">{{ row.branch }}</td>
+                    {% include "audits/partials/dashboard_action_counts.html" with who=row.branch %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h3 class="mt-2 font-bold">Actions by owner <span class="text-sm font-normal text-base-content/60">most overdue first</span></h3>
+        <div class="flex items-center gap-2">
+          <p class="flex-1 text-sm text-base-content/70">Who is holding the pending actions. Click a number to see that person's actions below.</p>
+          {% include "audits/partials/dashboard_csv_button.html" with csv_href=csv_url|add:"&part=owners" csv_tip="Download pending actions per owner as CSV" %}
+        </div>
+        <div class="max-h-72 overflow-auto">
+          <table class="table table-sm table-zebra">
+            <thead><tr><th>Owner</th><th class="text-right">Open</th><th class="text-right">Waiting to verify</th><th class="text-right">Total</th><th class="text-right">Overdue</th></tr></thead>
+            <tbody>
+              {% for row in owners %}
+                <tr>
+                  <td class="font-bold">{{ row.owner_name }}</td>
+                  {% include "audits/partials/dashboard_action_counts.html" with who=row.owner_name %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div role="alert" class="alert alert-soft alert-success py-2 text-sm"><span>No pending actions. Every action for these filters is Verified.</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card card-sm bg-base-100" id="pending-actions">
+    <div class="card-body">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="card-title flex-1">Action list</h2>
+        <a href="{{ late_link.url }}" hx-get="{{ late_link.url }}" hx-target="#overdue-table" hx-push-url="true"
+           class="btn btn-sm {% if late_link.active %}btn-error{% else %}btn-outline btn-error{% endif %}" title="{{ late_link.tip }}">{{ late_link.label }}</a>
+      </div>
+      <p class="text-sm text-base-content/70">Every action not yet Verified. A red “Days late” means the due date has passed.</p>
       {% include "audits/partials/dashboard_overdue_table.html" %}
     </div>
   </div>

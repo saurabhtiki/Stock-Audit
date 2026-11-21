@@ -16,7 +16,7 @@ Plan → Build → Test, one phase at a time.
 - End of each phase: update "Current phase" (in 1 line short) below before starting the next
 
 # Current phase
-Phase 9 done (dashboard item filter, one Trend tab, repeat grid). Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
+Phase 10 done (pending actions + drill-down, owners, closing speed, top loss, KPI tiles). Next: continue the pilot (docs/pilot-checklist.md), then plan fixes from it.
 
 # Use skills
 - for Front-end & screens use skills- frontend-design,HTMX & daisyui.

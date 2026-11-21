@@ -1,6 +1,6 @@
 // Dashboard charts (Chart.js). Each <canvas data-chart="ID"> reads its data from the
 // <script type="application/json" id="ID"> next to it, written by the server:
-//   {type: "bar" | "line", stacked?, labels: [...], datasets: [{label, data, color, line?, bar?, right_axis?}]}
+//   {type: "bar" | "line", stacked?, horizontal?, integer?, labels: [...], datasets: [{label, data, color, line?, bar?, right_axis?}]}
 // Charts are drawn on page load and again after every htmx swap (filters / tabs).
 (function () {
   "use strict";
@@ -22,6 +22,8 @@
       age2: themeColor("--color-warning", "#d97706"),
       age3: "#ea580c",
       age4: themeColor("--color-error", "#dc2626"),
+      open: themeColor("--color-error", "#dc2626"),
+      waiting: themeColor("--color-warning", "#d97706"),
       text: themeColor("--color-base-content", "#1f2937"),
     };
   }
@@ -47,8 +49,9 @@
       };
     });
     var scales = {
-      x: { stacked: !!spec.stacked, ticks: { color: colors.text } },
-      y: { stacked: !!spec.stacked, beginAtZero: true, ticks: { color: colors.text } },
+      x: { stacked: !!spec.stacked, beginAtZero: true, ticks: { color: colors.text } },
+      // integer = counts (queries, actions): ticks 0, 1, 2 … not 0.5
+      y: { stacked: !!spec.stacked, beginAtZero: true, ticks: { color: colors.text, precision: spec.integer ? 0 : undefined } },
     };
     if (hasRightAxis) {
       scales.y1 = {
@@ -63,6 +66,7 @@
       type: spec.type,
       data: { labels: spec.labels, datasets: datasets },
       options: {
+        indexAxis: spec.horizontal ? "y" : "x", // horizontal = one bar per row, e.g. per Branch
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },

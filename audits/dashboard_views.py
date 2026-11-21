@@ -60,22 +60,37 @@ STATUS_COLUMNS = [
 ]
 
 
-OVERDUE_COLUMNS = [
+PENDING_STATUSES = {
+    Action.Status.OPEN: "Open",
+    Action.Status.DONE: "Done – waiting to verify",
+}
+OVERDUE_CHOICES = {dashboards.OVERDUE: "Overdue", dashboards.NOT_LATE: "Not late"}
+
+
+def _days_late(action):
+    """Days past the due date; blank when not late yet or no due date."""
+    return action.days_late.days if action.overdue == dashboards.OVERDUE else None
+
+
+PENDING_COLUMNS = [
     Column("branch_code", "Branch", type=CHOICE),
     Column("audit_title", "Audit"),
     Column("item_code", "Item No"),
     Column("description", "Action"),
     Column("owner_name", "Owner", type=CHOICE),
-    Column("status", "Status", type=CHOICE, choices=dict(Action.Status.choices)),
+    Column("status", "Status", type=CHOICE, choices=PENDING_STATUSES),
     Column("due_date", "Due", type=DATE),
+    Column("overdue", "Late?", type=CHOICE, choices=OVERDUE_CHOICES),
     Column(
         "days_late",
         "Days late",
         type=NUMBER,
         filterable=False,  # a day count worked out from today; filter on "Due" instead
-        csv_value=lambda action: action.days_late.days,
+        csv_value=_days_late,
     ),
 ]
+# Params the Branch / owner drill-down links replace (everything else in the table stays).
+DRILL_PARAMS = {"branch_code", "owner_name", "status", "overdue", "page"}
 
 CELL_LABELS = ("6th last", "5th last", "4th last", "3rd last", "2nd last", "Latest")
 CELL_CSV = {"ok": "OK", "not_counted": "Not counted", "missing": "Not in audit", "none": ""}
@@ -185,6 +200,7 @@ def _queries_context(request, filters):
     chart = {
         "type": "bar",
         "stacked": True,
+        "integer": True,
         "labels": [row["branch"] for row in ageing],
         "datasets": [
             {
@@ -195,10 +211,10 @@ def _queries_context(request, filters):
             for i, label in enumerate(age_labels)
         ],
     }
-    overdue = DataTable(
+    table = DataTable(
         request.GET,
-        dashboards.overdue_actions(filters),
-        OVERDUE_COLUMNS,
+        dashboards.pending_actions(filters),
+        PENDING_COLUMNS,
         table_id="overdue-table",
         density_switch=True,
         column_toggle=True,
@@ -209,9 +225,9 @@ def _queries_context(request, filters):
         base_url=request.path,
         noun="actions",
         keep=dashboards.FILTER_PARAMS,
-        csv_params=[("part", "overdue")],
+        csv_params=[("part", "actions")],
         shortcuts=[
-            ("All", "status", "", "Every overdue action, Open and Done"),
+            ("All", "status", "", "Every action not yet Verified"),
             ("Open", "status", Action.Status.OPEN, "Not done yet"),
             (
                 "Waiting to verify",
@@ -221,7 +237,72 @@ def _queries_context(request, filters):
             ),
         ],
     )
-    return {"age_labels": age_labels, "ageing": ageing, "ageing_chart": chart, "table": overdue}
+    late_tip = "Only the actions whose due date has passed"
+    late_link = {
+        "label": "Overdue only",
+        "tip": late_tip,
+        "url": table.url(drop={"overdue", "page"}, add=[("overdue", dashboards.OVERDUE)]),
+        "active": request.GET.getlist("overdue") == [dashboards.OVERDUE],
+    }
+
+    def drill(**picked) -> str:
+        """Link that redraws the action table for one Branch / owner and status."""
+        return request.path + table.url(drop=DRILL_PARAMS, add=list(picked.items()))
+
+    pending = dashboards.pending_action_rows(filters)
+    for row in pending:
+        row["links"] = {
+            "open": drill(branch_code=row["branch"], status=Action.Status.OPEN),
+            "waiting": drill(branch_code=row["branch"], status=Action.Status.DONE),
+            "total": drill(branch_code=row["branch"]),
+            "overdue": drill(branch_code=row["branch"], overdue=dashboards.OVERDUE),
+        }
+    owners = dashboards.owner_rows(filters)
+    for row in owners:
+        name = row["owner_name"]
+        row["links"] = {
+            "open": drill(owner_name=name, status=Action.Status.OPEN),
+            "waiting": drill(owner_name=name, status=Action.Status.DONE),
+            "total": drill(owner_name=name),
+            "overdue": drill(owner_name=name, overdue=dashboards.OVERDUE),
+        }
+    pending_chart = {
+        "type": "bar",
+        "stacked": True,
+        "integer": True,
+        "labels": [row["branch"] for row in pending],
+        "datasets": [
+            {"label": "Open", "data": [r["open"] for r in pending], "color": "open"},
+            {
+                "label": "Waiting to verify",
+                "data": [r["waiting"] for r in pending],
+                "color": "waiting",
+            },
+        ],
+    }
+    speed = dashboards.closing_speed(filters)
+    speed_chart = {
+        "type": "bar",
+        "horizontal": True,
+        "labels": [row["branch"] for row in speed],
+        "datasets": [
+            {"label": "Average days", "data": [r["avg_days"] for r in speed], "color": "net"}
+        ],
+    }
+    return {
+        "age_labels": age_labels,
+        "ageing": ageing,
+        "ageing_chart": chart,
+        "table": table,
+        "late_link": late_link,
+        "pending": pending,
+        "pending_chart": pending_chart,
+        "pending_total": sum(row["total"] for row in pending),
+        "pending_overdue": sum(row["overdue"] for row in pending),
+        "owners": owners,
+        "speed": speed,
+        "speed_chart": speed_chart,
+    }
 
 
 def _add_detail_links(rows, filters, kind: str, make_params) -> None:
@@ -282,11 +363,19 @@ def _audit_chart(rows) -> dict:
 
 def _trend_context(request, filters):
     """One Branch picked: one point per audit. More Branches: totals per month, with a
-    Branch × month table. Picked items narrow both to those items' lines."""
+    Branch × month table. Picked items narrow both to those items' lines.
+    Both also show the 10 items with the biggest shortage value."""
+    top_loss = dashboards.top_loss_items(filters)
+    _add_detail_links(top_loss, filters, "loss", lambda row: [("row_item", row["item_id"])])
     if len(filters.branches) == 1:
         rows = dashboards.trend_rows(filters, branch=filters.branches[0])
         _add_detail_links(rows, filters, "trend", lambda row: [("audit", row["audit_id"])])
-        return {"mode": "audit", "rows": rows, "chart": _audit_chart(rows)}
+        return {
+            "mode": "audit",
+            "rows": rows,
+            "chart": _audit_chart(rows),
+            "top_loss": top_loss,
+        }
     rows = dashboards.variance_rows(filters)
     _add_detail_links(
         rows,
@@ -294,7 +383,7 @@ def _trend_context(request, filters):
         "variance",
         lambda row: [("row_branch", row["branch_id"]), ("month", f"{row['month']:%Y-%m}")],
     )
-    return {"mode": "month", "rows": rows, "chart": _variance_chart(rows)}
+    return {"mode": "month", "rows": rows, "chart": _variance_chart(rows), "top_loss": top_loss}
 
 
 def _repeat_context(request, filters):
@@ -349,9 +438,37 @@ CONTEXT_BUILDERS = {
 
 def _csv(tab: str, context: dict):
     """CSV of what the tab shows (the status grid streams its own, with all its filters)."""
+    part = context.get("csv_part")
     if tab == "queries":
-        if context.get("csv_part") == "overdue":
-            return context["table"].csv_response(_csv_name("overdue_actions"))
+        if part in ("actions", "overdue"):  # "overdue" = links saved before Phase 10
+            return context["table"].csv_response(_csv_name("pending_actions"))
+        if part == "summary":
+            return rows_csv_response(
+                _csv_name("pending_actions_by_branch"),
+                ["Branch", "Open", "Waiting to verify", "Total pending", "Overdue"],
+                [
+                    [r["branch"], r["open"], r["waiting"], r["total"], r["overdue"]]
+                    for r in context["pending"]
+                ],
+            )
+        if part == "owners":
+            return rows_csv_response(
+                _csv_name("pending_actions_by_owner"),
+                ["Owner", "Open", "Waiting to verify", "Total pending", "Overdue"],
+                [
+                    [r["owner_name"], r["open"], r["waiting"], r["total"], r["overdue"]]
+                    for r in context["owners"]
+                ],
+            )
+        if part == "speed":
+            return rows_csv_response(
+                _csv_name("query_closing_speed"),
+                ["Branch", "Queries closed", "Average days", "Slowest (days)"],
+                [
+                    [r["branch"], r["closed"], r["avg_days"], r["max_days"]]
+                    for r in context["speed"]
+                ],
+            )
         return rows_csv_response(
             _csv_name("query_ageing"),
             ["Branch", *(f"{label} days" for label in context["age_labels"]), "Total open"],
@@ -359,6 +476,15 @@ def _csv(tab: str, context: dict):
         )
     if tab == "repeat":
         return context["table"].csv_response(_csv_name(tab))
+    if part == "toploss":
+        return rows_csv_response(
+            _csv_name("top_loss_items"),
+            ["Item No", "Description", "Times short", "Shortage value"],
+            [
+                [r["item_code"], r["description"], r["times"], r["shortage"]]
+                for r in context["top_loss"]
+            ],
+        )
     if context["mode"] == "month":
         return rows_csv_response(
             _csv_name(tab),
@@ -407,6 +533,53 @@ def _not_found(request, message: str):
 def _report_branches(request):
     """Branches where the user has “View reports” (empty list = no dashboard at all)."""
     return list(branches_with_right(request.user, request.company, "view_reports"))
+
+
+def _kpi_tiles(numbers: dict, tab_urls: dict) -> list[dict]:
+    """The headline tiles above the tabs; each opens the tab that explains its number."""
+    net = numbers["net_variance"]
+    avg = numbers["avg_counted"]
+    return [
+        {
+            "title": "Audits done",
+            "value": numbers["audits_done"],
+            "note": f"of {numbers['audits']} in the period",
+            "tip": "Audits at Checking Done or Locked, out of all audits in the filters "
+            "(cancelled left out)",
+            "url": tab_urls["status"],
+        },
+        {
+            "title": "Avg % counted",
+            "value": "–" if avg is None else f"{avg}%",
+            "note": "across all audits in the period",
+            "tip": "Average share of lines counted, over every audit in the filters",
+            "url": tab_urls["status"],
+        },
+        {
+            "title": "Open queries",
+            "value": numbers["open_queries"],
+            "note": "not yet Closed",
+            "tip": "Queries raised by these audits and not Closed yet (same as the ageing total)",
+            "url": tab_urls["queries"],
+        },
+        {
+            "title": "Pending actions",
+            "value": numbers["pending_actions"],
+            "note": f"{numbers['overdue_actions']} overdue",
+            "note_class": "text-error font-bold" if numbers["overdue_actions"] else "",
+            "tip": "Actions not yet Verified (Open, or Done and waiting to verify); "
+            "overdue = due date passed",
+            "url": tab_urls["queries"],
+        },
+        {
+            "title": "Net variance ₹",
+            "value": f"{net:,.2f}",
+            "value_class": "text-error" if net < 0 else "text-info" if net > 0 else "",
+            "note": "loss" if net < 0 else "gain" if net > 0 else "even",
+            "tip": "Excess − Shortage value of counted lines (red = loss, blue = gain)",
+            "url": tab_urls["trend"],
+        },
+    ]
 
 
 def dashboard(request, tab: str = "status"):
@@ -463,10 +636,12 @@ def dashboard(request, tab: str = "status"):
     hx_target = request.headers.get("HX-Target", "")
     if _is_htmx(request) and hx_target in TABLE_TEMPLATES:
         template = TABLE_TEMPLATES[hx_target]
-    elif _is_htmx(request):
-        template = "audits/partials/dashboard_body.html"
     else:
-        template = "audits/dashboard.html"
+        template = (
+            "audits/partials/dashboard_body.html" if _is_htmx(request) else "audits/dashboard.html"
+        )
+        tab_urls = {item["name"]: item["url"] for item in context["tabs"]}
+        context["kpis"] = _kpi_tiles(dashboards.kpis(filters), tab_urls)
     response = _vary_on_htmx(render(request, template, context))
     patch_vary_headers(response, ["HX-Target"])
     return response
@@ -502,7 +677,7 @@ def dashboard_item_search(request):
     )
 
 
-DETAIL_KINDS = ("variance", "trend", "repeat")
+DETAIL_KINDS = ("variance", "trend", "repeat", "loss")
 
 
 def _detail_problem(request, message: str, status: int = 400):
@@ -528,8 +703,8 @@ def dashboard_detail(request, kind: str):
     filters = dashboards.read_filters(request.GET, allowed)
     context = {"kind": kind}
 
-    if kind == "repeat":
-        return _repeat_detail(request, filters)
+    if kind in ("repeat", "loss"):
+        return _repeat_detail(request, filters, every_branch=kind == "loss")
     if kind == "variance":
         branch_id = _int_param(request.GET, "row_branch")
         if branch_id not in filters.branch_ids:
@@ -563,10 +738,11 @@ def dashboard_detail(request, kind: str):
     return response
 
 
-def _repeat_detail(request, filters):
-    """Every audit of one item in one Branch (the repeat row's panel), newest first."""
-    branch_id = _int_param(request.GET, "row_branch")
-    if branch_id not in filters.branch_ids:
+def _repeat_detail(request, filters, every_branch: bool = False):
+    """Every audit of one item in one Branch (the repeat row's panel), or in every picked
+    Branch (the top-loss row's panel), newest first."""
+    branch_id = None if every_branch else _int_param(request.GET, "row_branch")
+    if not every_branch and branch_id not in filters.branch_ids:
         return _detail_problem(
             request, "This Branch is not in your dashboard filters, so its rows are hidden."
         )
@@ -574,7 +750,11 @@ def _repeat_detail(request, filters):
     if item_id is None or not Item.objects.filter(pk=item_id, company=request.company).exists():
         return _detail_problem(request, "This item is not in this company.")
     lines = dashboards.repeat_history(filters, branch_id, item_id)
-    return render(request, "audits/partials/dashboard_repeat_detail.html", {"lines": lines})
+    return render(
+        request,
+        "audits/partials/dashboard_repeat_detail.html",
+        {"lines": lines, "show_branch": every_branch},
+    )
 
 
 BOX_ID = re.compile(r"[a-z]+-detail-\d+")

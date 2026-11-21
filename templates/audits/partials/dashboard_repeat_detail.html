@@ -4,10 +4,11 @@
   <p class="mb-1 text-xs text-base-content/70">Every counted audit of this item in the picked months, newest first.</p>
   <div class="overflow-x-auto">
     <table class="table table-xs bg-base-100">
-      <thead><tr><th>Audit</th><th>Date</th><th class="text-right">Book qty</th><th class="text-right">Counted qty</th><th class="text-right">Diff</th><th class="text-right">Value</th><th>Status</th><th>Query</th></tr></thead>
+      <thead><tr>{% if show_branch %}<th>Branch</th>{% endif %}<th>Audit</th><th>Date</th><th class="text-right">Book qty</th><th class="text-right">Counted qty</th><th class="text-right">Diff</th><th class="text-right">Value</th><th>Status</th><th>Query</th></tr></thead>
       <tbody>
         {% for line in lines %}
           <tr>
+            {% if show_branch %}<td class="font-bold">{{ line.audit.branch.code }}</td>{% endif %}
             <td><a class="link link-primary" href="{% url 'audits:audit_detail' line.audit_id %}" title="Open this audit">{{ line.audit.title }}</a></td>
             <td class="whitespace-nowrap">{{ line.audit.audit_date|date:"d M Y" }}</td>
             <td class="text-right tabular-nums">{{ line.erp_qty|floatformat:"-3" }}</td>

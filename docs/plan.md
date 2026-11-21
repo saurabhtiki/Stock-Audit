@@ -750,3 +750,27 @@ Per-Branch comparison lines on the chart, changing the repeat rule, item filter 
 - repeat grid: last-6 cells right (red/blue qty, OK dot, not counted, missing audit); different Branches get their own columns; streak direction (short/excess/mixed); Min streak filter; CSV has the qty columns
 - row panel: every audit in the months, newest first, query link; other company / not-allowed Branch → 404
 - Status tab ignores the item filter; all existing tests keep passing
+
+## Phase 10 — Dashboard: pending actions, closing speed, top loss items, KPI tiles (DONE — 418 tests pass)
+
+Built notes: the old "Overdue actions" card is now **Pending actions** (table id kept as `overdue-table`). Counts per
+Branch / owner in `dashboards.pending_action_rows` / `owner_rows`; the "overdue" count filters on `due_date` itself
+(an aggregate filtered on the `overdue` annotation comes back 0 on SQLite). Number cells = `dashboard_action_counts.html`.
+Top loss ▸ reuses the repeat history panel (detail kind `loss`, every picked Branch, with a Branch column).
+Charts: `horizontal` and `integer` options in `static/js/dashboard.js`. Tests: `tests/test_phase10.py`.
+
+Goal: actions only showed once overdue, so actions with no due date or a future one were invisible.
+Example: Branch N1 has 4 actions not Verified: 3 Open, 1 Done waiting to verify, 2 of them overdue. Clicking "2"
+under Overdue redraws the action list with just those two.
+
+### Decisions (confirmed with the user)
+| # | Decision |
+|---|---|
+| 1 | **Pending actions** = not Verified (Open, or Done – waiting to verify). Card: stacked bar per Branch + table Branch / Open / Waiting / Total / Overdue. |
+| 2 | **Drill-down**: clicking a number redraws the action list below (same page, HTMX), filtered by Branch (or owner) + status / overdue. Chips let the user clear it. |
+| 3 | Action list: every pending action; quick buttons All / Open / Waiting to verify + "Overdue only"; new "Late?" column; Days late blank until the due date passes. |
+| 4 | **Actions by owner** under the Branch table, most overdue first, same drill-down. |
+| 5 | **Query closing speed** next to the ageing card: per Branch, closed queries, average and slowest days from raised to Closed. |
+| 6 | **Top 10 loss items** on the Trend tab: biggest total shortage value across picked Branches, ▸ shows every audit of the item. |
+| 7 | **KPI tiles** above the tabs on every tab: Audits done, Avg % counted, Open queries, Pending actions (overdue in red), Net variance ₹ (red loss / blue gain); each opens its tab. |
+| 8 | CSV for each new table (`part=summary`, `owners`, `speed`, `toploss`, `actions`; old `part=overdue` still works). |

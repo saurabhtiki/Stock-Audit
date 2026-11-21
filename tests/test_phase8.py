@@ -119,7 +119,7 @@ def test_overdue_table_click_and_csv(admin_client, admin_user, north):  # noqa: 
         admin_client.get(url, {"export": "csv", "part": "overdue"}).streaming_content
     ).decode("utf-8-sig")
     lines = csv_text.splitlines()
-    assert lines[0] == "Branch,Audit,Item No,Action,Owner,Status,Due,Days late"
+    assert lines[0] == "Branch,Audit,Item No,Action,Owner,Status,Due,Late?,Days late"
     assert len(lines) == 3 and lines[1].endswith(",4") and "Done" in csv_text
     # The ageing CSV (no part) is unchanged.
     ageing = b"".join(admin_client.get(url, {"export": "csv"}).streaming_content).decode()
