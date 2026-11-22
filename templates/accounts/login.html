@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Log in{% endblock %}
 {% block content %}
 <div class="mx-auto mt-10 max-w-sm sm:mt-20">
@@ -18,6 +19,7 @@
 
       <button type="submit" class="btn btn-primary mt-2">Log in</button>
       <p class="text-sm text-base-content/60">Forgot your password? Ask Admin to reset it.</p>
+      <p class="text-sm"><a class="link link-primary" href="{% static 'help/index.html' %}" target="_blank" rel="noopener" title="Step-by-step user guide with screenshots (opens in a new tab)">Help / user guide</a></p>
     </form>
   </div>
 </div>

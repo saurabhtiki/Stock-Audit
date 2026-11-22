@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Audit – User guide</title>
+<style>
+  :root {
+    --bar: #1b4ca1;
+    --bar-ink: #ffffff;
+    --hazard: #f2b705;
+    --ink: #17202e;
+    --muted: #5a6474;
+    --paper: #eef1f4;
+    --sheet: #ffffff;
+    --line: #d6dbe2;
+    --ok: #2f7d4f;
+    --bad: #b3261e;
+    --tip: #fff7dc;
+    --tip-line: #f2b705;
+    --link: #1b4ca1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bar: #163d82; --ink: #e6e9ee; --muted: #a3adbb; --paper: #121821; --sheet: #1b2330;
+      --line: #2e3a4b; --ok: #5cc58a; --bad: #ff8a80; --tip: #2b2614; --link: #8fb4ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  a { color: var(--link); }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--hazard); outline-offset: 2px; }
+
+  /* Top bar: same blue bar and hazard stripe as the app, so it feels like part of it. */
+  .bar {
+    position: sticky; top: 0; z-index: 20; background: var(--bar); color: var(--bar-ink);
+    border-bottom: 8px solid transparent;
+    border-image: repeating-linear-gradient(-45deg, var(--hazard) 0 14px, #1d2430 14px 28px) 8;
+  }
+  @media (max-width: 700px) { .bar { position: static; } html { scroll-padding-top: 12px; } }
+  .bar-inner { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .bar strong { font-size: 1.15rem; }
+  .bar span { opacity: .85; }
+  .search { margin-left: auto; flex: 0 1 300px; }
+  .search input {
+    width: 100%; padding: 8px 12px; border-radius: 6px; border: 0; font: inherit; font-size: .95rem;
+  }
+
+  .layout { max-width: 1200px; margin: 0 auto; padding: 24px 16px 80px; display: grid; grid-template-columns: 250px 1fr; gap: 32px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static !important; max-height: none !important; } }
+
+  nav.toc { position: sticky; top: 84px; align-self: start; max-height: calc(100vh - 100px); overflow: auto; font-size: .93rem; }
+  nav.toc h2 { font-size: .95rem; margin: 18px 0 4px; }
+  nav.toc h2:first-child { margin-top: 0; }
+  nav.toc ul { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 3px solid var(--line); }
+  nav.toc li a { display: block; padding: 3px 8px; text-decoration: none; color: var(--muted); border-radius: 4px; }
+  nav.toc li a:hover { color: var(--ink); background: var(--sheet); }
+  nav.toc .role-admin { border-color: #6b4fbb; }
+  nav.toc .role-user { border-color: #1b4ca1; }
+  nav.toc .role-manager { border-color: #c47f00; }
+  nav.toc .role-auditor { border-color: #2f7d4f; }
+
+  main { min-width: 0; max-width: 860px; }
+  h1 { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
+  .lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
+
+  /* Role picker: the one bold element. Each role has its own colour, reused in the menu and headings. */
+  .roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 0 0 36px; }
+  .roles a {
+    display: block; padding: 14px 16px; background: var(--sheet); color: var(--ink); text-decoration: none;
+    border-radius: 8px; border-left: 8px solid var(--c); box-shadow: 0 1px 0 var(--line);
+  }
+  .roles a:hover { transform: translateY(-1px); }
+  .roles b { display: block; font-size: 1.1rem; color: var(--c); }
+  .roles small { color: var(--muted); }
+  .c-admin { --c: #6b4fbb; } .c-user { --c: #1b4ca1; } .c-manager { --c: #c47f00; } .c-auditor { --c: #2f7d4f; } .c-viewer { --c: #5a6474; }
+  @media (prefers-color-scheme: dark) { .c-admin { --c: #b9a6ff; } .c-user { --c: #8fb4ff; } .c-manager { --c: #ffc35c; } .c-auditor { --c: #5cc58a; } .c-viewer { --c: #a3adbb; } }
+
+  section.part { margin: 0 0 56px; }
+  .part-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 4px solid var(--c, var(--line)); padding-bottom: 6px; margin-bottom: 18px; }
+  .part-head h2 { font-size: 1.7rem; margin: 0; color: var(--c, var(--ink)); }
+  .part-head p { margin: 0; color: var(--muted); }
+
+  article.task { background: var(--sheet); border-radius: 10px; padding: 20px 22px; margin: 0 0 20px; border: 1px solid var(--line); }
+  article.task h3 { margin: 0 0 4px; font-size: 1.25rem; }
+  article.task .why { margin: 0 0 12px; color: var(--muted); }
+  ol.steps { margin: 0 0 8px; padding-left: 1.4em; }
+  ol.steps li { margin: 0 0 6px; padding-left: 4px; }
+  ol.steps li::marker { font-weight: 700; color: var(--c, var(--bar)); }
+  .btn { display: inline-block; padding: 0 7px; border-radius: 4px; background: var(--bar); color: #fff; font-size: .88em; font-weight: 600; white-space: nowrap; }
+  .btn.out { background: transparent; color: var(--link); border: 1.5px solid currentColor; }
+  .btn.warn { background: var(--hazard); color: #1d2430; }
+  .tab { font-weight: 600; border-bottom: 2px solid var(--hazard); white-space: nowrap; }
+
+  figure { margin: 14px 0 6px; }
+  figure img {
+    display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line);
+    cursor: zoom-in; background: #fff;
+  }
+  figure.phone img { max-width: 300px; }
+  figure.half img { max-width: 560px; }
+  figcaption { font-size: .87rem; color: var(--muted); margin-top: 6px; }
+
+  .note { background: var(--tip); border-left: 5px solid var(--tip-line); padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+  .note.stop { border-left-color: var(--bad); }
+  .eg { color: var(--muted); font-style: italic; }
+
+  /* The audit's four stages, drawn as a track. */
+  .track { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 12px 0 8px; counter-reset: st; }
+  .track div { position: relative; background: var(--sheet); border: 1px solid var(--line); padding: 12px 14px 12px 18px; }
+  .track div + div { border-left: 0; }
+  .track div:first-child { border-radius: 8px 0 0 8px; }
+  .track div:last-child { border-radius: 0 8px 8px 0; }
+  .track b { display: block; }
+  .track b::before { counter-increment: st; content: counter(st) ". "; color: var(--bar); }
+  .track small { color: var(--muted); display: block; line-height: 1.4; }
+  @media (max-width: 700px) { .track { grid-template-columns: 1fr 1fr; } .track div { border: 1px solid var(--line) !important; border-radius: 0 !important; } }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: .93rem; background: var(--sheet); border-radius: 8px; overflow: hidden; }
+  table.grid th, table.grid td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.grid th { background: var(--bar); color: #fff; font-weight: 600; }
+  .scroll { overflow-x: auto; }
+
+  dl.faq dt { font-weight: 700; margin-top: 14px; }
+  dl.faq dd { margin: 4px 0 0; color: var(--ink); }
+
+  .hidden-by-search { display: none !important; }
+  #no-hits { display: none; }
+
+  dialog#zoom { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 96vh; }
+  dialog#zoom::backdrop { background: rgba(10, 15, 25, .82); }
+  dialog#zoom img { display: block; max-width: 96vw; max-height: 92vh; border-radius: 6px; }
+  dialog#zoom button { position: fixed; top: 12px; right: 16px; font-size: 1.6rem; background: #fff; border: 0; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; }
+
+  footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--line); padding-top: 16px; }
+  @media print { .bar, nav.toc, .search { display: none; } .layout { display: block; } article.task { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <strong>Stock Audit</strong><span>User guide</span>
+    <div class="search">
+      <label for="find" style="position:absolute;left:-9999px">Search the guide</label>
+      <input id="find" type="search" placeholder="Search the guide, e.g. freeze, password" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-label="Guide contents">
+    <h2>Start here</h2>
+    <ul>
+      <li><a href="#login">Log in</a></li>
+      <li><a href="#home">Your home page</a></li>
+      <li><a href="#stages">How an audit moves</a></li>
+      <li><a href="#tables">Using lists and tables</a></li>
+      <li><a href="#me">Profile and password</a></li>
+    </ul>
+    <h2>Admin</h2>
+    <ul class="role-admin">
+      <li><a href="#a-company">Companies and Branches</a></li>
+      <li><a href="#a-user">Add a user</a></li>
+      <li><a href="#a-rights">Give rights per Branch</a></li>
+      <li><a href="#a-reset">Reset password / deactivate</a></li>
+      <li><a href="#a-reopen">Reopen a locked audit</a></li>
+      <li><a href="#a-cancel">Cancel a wrong audit</a></li>
+      <li><a href="#a-log">Activity log</a></li>
+      <li><a href="#a-backup">Download a backup</a></li>
+    </ul>
+    <h2>User</h2>
+    <ul class="role-user">
+      <li><a href="#u-create">Create an audit</a></li>
+      <li><a href="#u-erp">Upload ERP stock</a></li>
+      <li><a href="#u-reply">Reply to a query</a></li>
+      <li><a href="#u-action">Finish an action</a></li>
+      <li><a href="#u-items">Review new items</a></li>
+    </ul>
+    <h2>Manager</h2>
+    <ul class="role-manager">
+      <li><a href="#m-freeze">Set tolerance and freeze</a></li>
+      <li><a href="#m-action">Add an action</a></li>
+      <li><a href="#m-verify">Verify and close a query</a></li>
+      <li><a href="#m-lock">Lock an audit</a></li>
+    </ul>
+    <h2>Auditor</h2>
+    <ul class="role-auditor">
+      <li><a href="#x-count">Count in the app</a></li>
+      <li><a href="#x-sheet">Count offline with Excel</a></li>
+      <li><a href="#x-remarks">Remarks and photos</a></li>
+      <li><a href="#x-done">Mark Checking Done</a></li>
+    </ul>
+    <h2>Everyone</h2>
+    <ul>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#reports">PDF and Excel reports</a></li>
+      <li><a href="#faq">Questions and problems</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Stock Audit user guide</h1>
+    <p class="lead">Short, step-by-step help for each job in the app. Pick your role below, or search at the top. Click any screenshot to see it bigger.</p>
+
+    <div class="roles">
+      <a class="c-admin" href="#admin"><b>Admin</b><small>Sets up companies, Branches, users and rights</small></a>
+      <a class="c-user" href="#user"><b>User</b><small>Uploads ERP stock, replies to queries, does actions</small></a>
+      <a class="c-manager" href="#manager"><b>Manager</b><small>Freezes stock, adds actions, closes queries, locks</small></a>
+      <a class="c-auditor" href="#auditor"><b>Auditor</b><small>Counts stock, adds remarks and photos</small></a>
+      <a class="c-viewer" href="#dashboard"><b>Viewer</b><small>Looks at audits, dashboard and reports</small></a>
+    </div>
+
+    <p id="no-hits" class="note">Nothing in the guide matches that search. Try a shorter word, like “count” or “query”.</p>
+
+    <!-- ============ START HERE ============ -->
+    <section class="part" id="start">
+      <div class="part-head"><h2>Start here</h2><p>For everyone</p></div>
+
+      <article class="task" id="login">
+        <h3>Log in</h3>
+        <p class="why">Admin gives you a username and a temporary password.</p>
+        <ol class="steps">
+          <li>Open the app address your office gave you (for example <i>https://stock.yourcompany.com</i>).</li>
+          <li>Type your <b>Username</b> and <b>Password</b>, then click <span class="btn">Log in</span>.</li>
+          <li>The first time, the app asks you to pick a new password. Type the old one once and the new one twice.</li>
+        </ol>
+        <figure class="half"><img src="img/login.png" alt="Login page with username and password boxes" loading="lazy"></figure>
+        <div class="note">5 wrong passwords in a row lock your login for 15 minutes. Forgot it? Ask Admin to reset it. If you leave the app idle for 8 hours, you are logged out.</div>
+      </article>
+
+      <article class="task" id="home">
+        <h3>Your home page: what is waiting for you</h3>
+        <p class="why">After you log in, the home page lists the work waiting for <b>you</b>.</p>
+        <ol class="steps">
+          <li>Look at the tabs under <b>My pending items</b>: <span class="tab">Replies to write</span>, <span class="tab">My actions</span>, <span class="tab">To verify</span>, <span class="tab">To close</span>. The number on each tab is how many are waiting.</li>
+          <li>Click a tab, then click the <b>Item No</b> (blue link) to open that query and do the work.</li>
+          <li>Use the menu at the top: <b>Dashboard</b>, <b>Audits</b>, <b>Queries</b>, <b>Items</b>. Your name on the right opens your profile, password and <b>Log out</b>.</li>
+          <li>Working for more than one company? Pick the company in the box at the top.</li>
+        </ol>
+        <figure><img src="img/home-priya.png" alt="Home page with My pending items tabs" loading="lazy"><figcaption>Example: Priya has 2 replies to write and 1 action to finish.</figcaption></figure>
+        <p>On a phone, the menu sits behind the <b>☰</b> button at the top right.</p>
+      </article>
+
+      <article class="task" id="stages">
+        <h3>How an audit moves</h3>
+        <p class="why">Every audit goes through 4 stages, one after the other. The current stage is shown in blue under the audit name.</p>
+        <div class="track">
+          <div><b>ERP Draft</b><small>ERP file uploaded. Can be replaced.</small><small><i>User</i></small></div>
+          <div><b>ERP Frozen</b><small>Tolerance set, stock fixed. Counting starts.</small><small><i>Manager</i></small></div>
+          <div><b>Checking Done</b><small>Count finished. Queries raised for Excess / Shortage.</small><small><i>Auditor</i></small></div>
+          <div><b>Locked</b><small>Audit closed. Only Admin can reopen.</small><small><i>Manager</i></small></div>
+        </div>
+        <p><b>Example:</b> ERP says 400 bolts, auditor counts 370. Difference −30 is a <b>Shortage</b>, so at Checking Done a <b>query</b> is raised. Priya replies “30 issued to site without slip”, Mohan adds an action “Raise issue slip”, Priya marks it Done, Mohan verifies and closes the query.</p>
+        <p>A query moves: <b>Open → Reply Submitted → Action Pending → Closed</b>. A query that is not Closed when the audit is locked is <b>carried forward</b> and shows up in the Branch's next audit.</p>
+        <div class="note">What you can do depends on the <b>rights</b> Admin gave you in each Branch. If a button is missing, you don't have that right there. Ask Admin.</div>
+      </article>
+
+      <article class="task" id="tables">
+        <h3>Using lists and tables</h3>
+        <p class="why">Every list (audits, queries, items, users…) works the same way.</p>
+        <ol class="steps">
+          <li><b>Search box</b>: type part of a code or name to narrow the list.</li>
+          <li><b>↕ arrows</b> on a heading: click to sort. <b>Funnel icon</b>: filter that column (for example only “Shortage”).</li>
+          <li><b>S / M / L</b>: make rows smaller or bigger. <span class="btn out">Columns</span>: show or hide columns.</li>
+          <li><b>⤓ download button</b>: saves all matching rows as a CSV file you can open in Excel.</li>
+        </ol>
+        <figure><img src="img/queries.png" alt="Queries list with search, filters and download button" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="me">
+        <h3>Change your photo or password</h3>
+        <ol class="steps">
+          <li>Click your name at the top right, then <b>My profile and photo</b> to add a photo and see your companies and rights.</li>
+          <li>Click <b>Change password</b> to pick a new password (at least 8 characters).</li>
+          <li>The moon/sun icon at the top switches between light and dark screens.</li>
+        </ol>
+        <figure><img src="img/profile.png" alt="My profile page" loading="lazy"></figure>
+      </article>
+    </section>
+
+    <!-- ============ ADMIN ============ -->
+    <section class="part c-admin" id="admin">
+      <div class="part-head"><h2>Admin</h2><p>Set up the app and look after users</p></div>
+
+      <article class="task" id="a-company">
+        <h3>Add a company and its Branches</h3>
+        <p class="why">Do this once, before anyone else starts. Companies and Branches are never deleted; you deactivate them.</p>
+        <ol class="steps">
+          <li>Top menu <b>Admin → Companies</b>, then <b>Add company</b>. Type the name, address and (optional) logo. Click <span class="btn">Save company</span>.</li>
+          <li><b>Admin → Branches</b>, then <b>Add Branch</b>. Pick the company, type the Branch name and a short code (for example <i>N1 – North</i>). Click <span class="btn">Save Branch</span>.</li>
+          <li>Optional: <b>Admin → Departments</b> to add departments like Stores or Finance.</li>
+        </ol>
+        <figure><img src="img/branches.png" alt="Branches list" loading="lazy"></figure>
+        <figure class="half"><img src="img/branch-form.png" alt="Add Branch form" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="a-user">
+        <h3>Add a user</h3>
+        <ol class="steps">
+          <li><b>Admin → Users</b>, then <b>Add user</b>.</li>
+          <li>Type the username, full name, email and a <b>temporary password</b>. Click <span class="btn">Add user</span>. Tell the person their username and temporary password; they must change it at first login.</li>
+          <li>On the user's page, under <b>Companies and rights</b>, pick the <b>Company</b> and <b>Role</b> (Manager, User, Auditor or Viewer) and click <span class="btn">Add to company</span>.</li>
+          <li>Pick the <b>Department</b> if you use them.</li>
+          <li>Click <span class="btn">Branch rights</span> to choose what they can do in each Branch (next step).</li>
+        </ol>
+        <figure><img src="img/user-create.png" alt="Add user form" loading="lazy"></figure>
+        <figure><img src="img/user-detail.png" alt="User page with Companies and rights" loading="lazy"><figcaption>The user page: company and role on the left, details and password reset on the right.</figcaption></figure>
+      </article>
+
+      <article class="task" id="a-rights">
+        <h3>Give rights per Branch</h3>
+        <p class="why">The role only gives starting ticks. You decide the real rights for each Branch. The same person can have different rights in different Branches.</p>
+        <ol class="steps">
+          <li>From the user's page click <span class="btn">Branch rights</span>.</li>
+          <li>Tick what they may do in each Branch row. A Branch with no ticks is hidden from them.</li>
+          <li>Same ticks for every Branch? Set one row and click <span class="btn out">Apply to all</span>.</li>
+          <li>Same as another person? Pick them in <b>Copy rights from</b> and click <span class="btn">Copy</span>.</li>
+          <li>Click <span class="btn">Save rights</span>.</li>
+        </ol>
+        <figure><img src="img/rights-grid.png" alt="Rights grid with ticks per Branch" loading="lazy"></figure>
+        <div class="scroll">
+        <table class="grid">
+          <tr><th>Right</th><th>Lets the person…</th><th>Usually</th></tr>
+          <tr><td>Upload ERP</td><td>create audits and upload ERP stock files</td><td>User</td></tr>
+          <tr><td>Tolerance &amp; freeze</td><td>set tolerance and freeze ERP stock</td><td>Manager</td></tr>
+          <tr><td>Count</td><td>enter counts and remarks, mark Checking Done</td><td>Auditor</td></tr>
+          <tr><td>Media</td><td>upload photos, videos and files</td><td>Auditor</td></tr>
+          <tr><td>Reply</td><td>reply to queries</td><td>User</td></tr>
+          <tr><td>Actions</td><td>create and assign actions, mark them done</td><td>User, Manager</td></tr>
+          <tr><td>Verify &amp; close</td><td>verify actions and close queries</td><td>Manager</td></tr>
+          <tr><td>Lock</td><td>lock audits</td><td>Manager</td></tr>
+          <tr><td>Reports</td><td>see the dashboard and reports</td><td>Everyone</td></tr>
+        </table>
+        </div>
+        <p class="eg">Example: Ravi is an Auditor in North (Count + Media) but a Manager in South (Tolerance &amp; freeze + Lock).</p>
+      </article>
+
+      <article class="task" id="a-reset">
+        <h3>Reset a password, deactivate a user</h3>
+        <ol class="steps">
+          <li><b>Admin → Users</b> and click the user.</li>
+          <li><b>Forgot password or locked out:</b> type a temporary password under <b>Reset password</b> and click <span class="btn warn">Reset password</span>. This also unlocks the login.</li>
+          <li><b>Left the company:</b> click <b>Deactivate user</b>. Users are never deleted, so their history stays.</li>
+          <li><b>No longer works for one company:</b> click <b>Remove access</b> on that company's row.</li>
+        </ol>
+      </article>
+
+      <article class="task" id="a-reopen">
+        <h3>Reopen a locked audit</h3>
+        <p class="why">Only Admin can do this, and a reason is required. The audit goes back to Checking Done (counts still can't change).</p>
+        <ol class="steps">
+          <li>Open the locked audit from <b>Audits</b>.</li>
+          <li>Click <span class="btn warn">Reopen audit</span>.</li>
+          <li>Type the reason, for example <i>“Photo of rack C missing from report”</i>, and click <span class="btn">Reopen audit</span>.</li>
+        </ol>
+        <figure><img src="img/reopen.png" alt="Reopen audit page with reason box" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="a-cancel">
+        <h3>Cancel a wrong audit</h3>
+        <p class="why">Used when the wrong ERP file was frozen and nobody has counted yet. Then create a new audit.</p>
+        <ol class="steps">
+          <li>Open the audit and click <b>Cancel audit</b>.</li>
+          <li>Type the reason and confirm with <span class="btn">Cancel audit</span>. (Keep audit = go back.)</li>
+        </ol>
+        <figure class="half"><img src="img/cancel.png" alt="Cancel audit page" loading="lazy"></figure>
+        <div class="note">Once any line has a count, the audit can no longer be cancelled.</div>
+      </article>
+
+      <article class="task" id="a-log">
+        <h3>See who changed what (Activity log)</h3>
+        <ol class="steps">
+          <li><b>Admin → Activity log</b>.</li>
+          <li>Search by user, record or words (for example the reopen reason). Each row shows the time, user, old value and new value.</li>
+        </ol>
+        <figure><img src="img/activity.png" alt="Activity log" loading="lazy"></figure>
+        <div class="note">Nobody, not even Admin, can edit or delete the log.</div>
+      </article>
+
+      <article class="task" id="a-backup">
+        <h3>Download a backup</h3>
+        <p class="why">Do this at least once a week. A yellow banner reminds you after 7 days.</p>
+        <ol class="steps">
+          <li><b>Admin → Backup</b>.</li>
+          <li>Click <b>Download backup (database + media)</b> for a full copy with photos, or <b>database only</b> for a small quick copy.</li>
+          <li>Keep the zip file somewhere safe, away from the server (for example a USB drive or company cloud folder).</li>
+        </ol>
+        <figure><img src="img/backup.png" alt="Backup page" loading="lazy"></figure>
+      </article>
+    </section>
+
+    <!-- ============ USER ============ -->
+    <section class="part c-user" id="user">
+      <div class="part-head"><h2>User</h2><p>Stockkeeper / office staff</p></div>
+
+      <article class="task" id="u-create">
+        <h3>Create an audit</h3>
+        <ol class="steps">
+          <li>Click <b>Audits</b> in the top menu, then <span class="btn">New audit</span>.</li>
+          <li>Fill in: <b>Branch</b>, <b>Title</b> (for example <i>Nov26</i>), <b>Audit date</b> (the day of counting), <b>Type</b> (Scheduled or Surprise), and <b>ERP stock as on</b> (the date of your ERP stock report).</li>
+          <li>Click <b>Save</b>. The audit opens in stage <b>ERP Draft</b>.</li>
+        </ol>
+        <figure><img src="img/audit-create.png" alt="New audit form" loading="lazy"></figure>
+        <figure><img src="img/audits.png" alt="Audits list" loading="lazy"><figcaption>The Audits list shows each audit with its stage.</figcaption></figure>
+      </article>
+
+      <article class="task" id="u-erp">
+        <h3>Upload ERP stock</h3>
+        <p class="why">You copy your ERP stock report into the template and upload it. You always see a preview first; nothing is saved until you confirm.</p>
+        <ol class="steps">
+          <li>Open the audit. In <b>Upload ERP file</b>, click the <b>ERP template</b> link to download it.</li>
+          <li>Copy from your ERP report into the columns <b>Item No, Description, UoM, ERP Qty, Rate p.u.</b> Save the file (Excel .xlsx or .csv).</li>
+          <li>Click <b>Choose File</b>, pick the file, click <span class="btn">Check file</span>.</li>
+          <li>Read the preview:
+            <ul>
+              <li><b>Errors</b> (red) must be fixed in your file, then upload again. <span class="eg">Example: “abc” in ERP Qty, or the same item twice.</span></li>
+              <li><b>Warnings</b> (yellow) need a tick to go ahead. <span class="eg">Example: ERP Qty is −1.</span></li>
+              <li><b>New items</b>: codes not yet in the item list. They are added automatically, marked “New”.</li>
+            </ul>
+          </li>
+          <li>All fine? Tick the warning box (if shown) and click <span class="btn">Confirm and save</span>.</li>
+        </ol>
+        <figure><img src="img/audit-draft.png" alt="Audit in ERP Draft with Upload ERP file box" loading="lazy"></figure>
+        <figure><img src="img/upload-preview.png" alt="Check ERP file preview with a warning" loading="lazy"><figcaption>The preview: 9 lines, 0 errors, 1 warning (negative qty) and 1 new item.</figcaption></figure>
+        <div class="note">Uploaded the wrong file? While the audit is in <b>ERP Draft</b>, just upload the right one; it replaces the old lines. After the Manager freezes, it can't be changed.</div>
+      </article>
+
+      <article class="task" id="u-reply">
+        <h3>Reply to a query</h3>
+        <p class="why">A query asks “why is there a difference?” for an Excess or Shortage line. One reply per query; you can add updates later.</p>
+        <ol class="steps">
+          <li>On your home page, open the <span class="tab">Replies to write</span> tab (or click <b>Queries</b> in the top menu).</li>
+          <li>Click the <b>Item No</b> to open the query. You see ERP qty, Physical qty and the variance.</li>
+          <li>In the <span class="tab">Reply</span> tab, explain the difference. <span class="eg">Example: “2 cartons sent to Branch B on 28 Aug, no slip raised.”</span></li>
+          <li>Click <span class="btn">Submit reply</span>. The status becomes <b>Reply Submitted</b>.</li>
+          <li>Have proof? Add it in the <span class="tab">Photos &amp; files</span> tab.</li>
+        </ol>
+        <figure><img src="img/query-reply.png" alt="Query page with Reply box" loading="lazy"></figure>
+        <p><b>Many queries with the same answer?</b> In the <b>Queries</b> list, tick them and type one common reply.</p>
+        <p><span class="tab">Item history</span> shows the same item in every audit of the Branch, so you can spot a problem that keeps coming back.</p>
+        <figure><img src="img/query-history.png" alt="Item history tab" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="u-action">
+        <h3>Finish an action given to you</h3>
+        <ol class="steps">
+          <li>On your home page open <span class="tab">My actions</span>.</li>
+          <li>Open the query, go to the <span class="tab">Actions</span> tab and read what needs to be done and by when. Overdue dates are red.</li>
+          <li>Do the work (for example raise the slip in ERP). Attach proof under <b>Photos &amp; files</b> if needed.</li>
+          <li>Click <span class="btn" style="background:var(--ok)">Mark Done</span>. Clicked by mistake? Use <b>Undo Done</b> until it is verified.</li>
+        </ol>
+        <figure><img src="img/query-action-owner.png" alt="Actions tab with Mark Done button" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="u-items">
+        <h3>Review new items</h3>
+        <ol class="steps">
+          <li>Click <b>Items</b> in the top menu, then <b>Show new items</b>.</li>
+          <li>Check the code, description and unit. Click an item to fix it.</li>
+          <li>Tick the checked items and remove the “New” mark.</li>
+        </ol>
+        <figure><img src="img/items.png" alt="Items list" loading="lazy"></figure>
+      </article>
+    </section>
+
+    <!-- ============ MANAGER ============ -->
+    <section class="part c-manager" id="manager">
+      <div class="part-head"><h2>Manager</h2><p>Freeze, follow up and lock</p></div>
+
+      <article class="task" id="m-freeze">
+        <h3>Set tolerance and freeze ERP stock</h3>
+        <p class="why">Tolerance is the small difference you accept. After freezing, the ERP lines can't change and the auditor can start counting.</p>
+        <ol class="steps">
+          <li>Open the audit (stage <b>ERP Draft</b>, ERP file confirmed) and click <span class="btn">Tolerance &amp; freeze</span>.</li>
+          <li>Check the summary: lines, total value, negative lines, new items.</li>
+          <li>Type the <b>Quantity tolerance</b> (for example 2) and, if you want, the <b>Percentage tolerance</b> (for example 5).</li>
+          <li>Tick “I understand…” and click <span class="btn warn">Freeze ERP stock</span>.</li>
+        </ol>
+        <figure><img src="img/freeze.png" alt="Tolerance and freeze page" loading="lazy"></figure>
+        <p class="eg">Example: ERP 100, qty tolerance 2, % tolerance 5. A count of 97 (difference 3) is more than 2, so it is flagged. A count of 99 is not.</p>
+      </article>
+
+      <article class="task" id="m-action">
+        <h3>Add an action to a query</h3>
+        <ol class="steps">
+          <li>Open the query and go to the <span class="tab">Actions</span> tab.</li>
+          <li>Type what needs to be done. <span class="eg">Example: “Raise transfer slip for 8 pcs”.</span></li>
+          <li>Pick the <b>owner</b> and, if needed, a <b>due date</b>. Click <span class="btn">Add action</span>.</li>
+          <li>The query becomes <b>Action Pending</b> and the owner sees it under <span class="tab">My actions</span>.</li>
+        </ol>
+        <figure><img src="img/query-actions.png" alt="Actions tab with Add action form" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="m-verify">
+        <h3>Verify the action and close the query</h3>
+        <ol class="steps">
+          <li>On your home page open <span class="tab">To verify</span>. Open the query, <span class="tab">Actions</span> tab.</li>
+          <li>Check the work, then click <span class="btn">Verify</span>. This can't be undone.</li>
+          <li>When every action is verified (or no action was needed), open the <span class="tab">Close query</span> tab, add a note if you like, and click <span class="btn" style="background:var(--ok)">Close query</span>.</li>
+        </ol>
+        <figure><img src="img/query-verify.png" alt="Action marked Done, waiting for Verify" loading="lazy"></figure>
+        <figure><img src="img/query-close.png" alt="Close query tab" loading="lazy"></figure>
+        <div class="note">See “Can't close yet: 1 action not Verified yet”? Verify the action first. A closed query can be reopened with <b>Reopen query</b>; it goes back to Open.</div>
+      </article>
+
+      <article class="task" id="m-lock">
+        <h3>Lock an audit</h3>
+        <p class="why">Locking closes the audit after Checking Done. Queries that are still open carry forward to the next audit.</p>
+        <ol class="steps">
+          <li>Open the audit (stage <b>Checking Done</b>) and click <b>Lock audit</b>.</li>
+          <li>Read the summary: how many queries are still open and will carry forward.</li>
+          <li>Tick “I understand…” and click <span class="btn warn">Lock audit</span>.</li>
+        </ol>
+        <figure><img src="img/lock.png" alt="Lock audit page" loading="lazy"></figure>
+        <figure><img src="img/audit-queries-tab.png" alt="Audit Queries tab" loading="lazy"><figcaption>An audit's <b>Queries</b> tab also lists open queries carried from earlier audits.</figcaption></figure>
+      </article>
+    </section>
+
+    <!-- ============ AUDITOR ============ -->
+    <section class="part c-auditor" id="auditor">
+      <div class="part-head"><h2>Auditor</h2><p>Count, note and photograph</p></div>
+
+      <article class="task" id="x-count">
+        <h3>Count in the app (phone or computer)</h3>
+        <p class="why">You can count once the audit is <b>ERP Frozen</b>. Each count saves on its own.</p>
+        <ol class="steps">
+          <li>Click <b>Audits</b> and open the audit.</li>
+          <li>Find the item with the <b>search box</b> (code or description).</li>
+          <li>Type the quantity in the <b>Physical Qty</b> box and press <b>Enter</b> (or tap outside the box). It saves straight away.</li>
+          <li>Leave a box empty if you have not counted it yet. Type <b>0</b> if the item is really not there.</li>
+          <li>Use the buttons <b>Not counted / Excess / Shortage / OK</b> to see what is left or what differs.</li>
+        </ol>
+        <figure><img src="img/count.png" alt="Count screen with Physical Qty boxes" loading="lazy"><figcaption>The boxes at the top update as you count: Counted, Not counted, OK, Excess, Shortage.</figcaption></figure>
+        <figure class="phone"><img src="img/phone-count.png" alt="Count screen on a phone" loading="lazy"><figcaption>The same screen on a phone.</figcaption></figure>
+      </article>
+
+      <article class="task" id="x-sheet">
+        <h3>Count offline with the Excel count sheet</h3>
+        <p class="why">No internet in the godown? Count on a sheet and upload it later. The sheet has no ERP Qty, so the count is blind.</p>
+        <ol class="steps">
+          <li>Open the audit and click <span class="btn out">Download count sheet</span>.</li>
+          <li>Fill the <b>Physical Qty</b> column (and <b>Remark</b> if needed). Don't change the item codes.</li>
+          <li>Back online, click <b>Choose File</b>, pick the sheet, click <span class="btn">Check sheet</span>.</li>
+          <li>Check the preview (errors like unknown item codes or text in Qty must be fixed). Then confirm.</li>
+        </ol>
+        <div class="note">Empty cells in the sheet never wipe out counts already typed in the app. You can upload sheets until Checking Done.</div>
+      </article>
+
+      <article class="task" id="x-remarks">
+        <h3>Add remarks and photos</h3>
+        <p class="why">Remarks are notes only; they never raise a query.</p>
+        <ol class="steps">
+          <li><b>For one item:</b> click the speech-bubble icon in the <b>Remarks</b> column. Type a remark and click <span class="btn">Add remark</span>. Add photos or files for that item in the same window.</li>
+          <li><b>For the whole audit:</b> open the <span class="tab">General remarks</span> tab. <span class="eg">Example: “No security at back gate.”</span></li>
+          <li><b>Audit photos:</b> open the <span class="tab">Photos &amp; files</span> tab, choose files, add a short note, click <span class="btn">Add</span>.</li>
+          <li>Tick <b>In report</b> on the photos you want printed in the PDF.</li>
+        </ol>
+        <figure><img src="img/line-remark.png" alt="Remarks window for one item" loading="lazy"></figure>
+        <figure><img src="img/photos-tab.png" alt="Photos and files tab with In report ticks" loading="lazy"></figure>
+        <p>Limits: photos up to 10 MB, videos up to 100 MB, other files (PDF, DOCX, XLSX) up to 5 MB.</p>
+      </article>
+
+      <article class="task" id="x-done">
+        <h3>Mark Checking Done</h3>
+        <p class="why">Tells everyone the count is complete. Queries are raised for every Excess and Shortage line.</p>
+        <ol class="steps">
+          <li>Open the audit and click <span class="btn">Checking Done</span>.</li>
+          <li>Check the summary: counted, not counted, excess and shortage lines, and how many queries will be raised.</li>
+          <li>Tick “I understand…” and click <span class="btn">Mark Checking Done</span>.</li>
+        </ol>
+        <figure><img src="img/checking-done.png" alt="Checking Done confirmation page" loading="lazy"></figure>
+        <div class="note stop"><b>This can't be undone, not even by Admin.</b> After this, counts can't be changed and no count sheet can be uploaded. Lines left empty stay “Not counted” and show in the report.</div>
+      </article>
+    </section>
+
+    <!-- ============ EVERYONE ============ -->
+    <section class="part" id="everyone">
+      <div class="part-head"><h2>Dashboard and reports</h2><p>Needs the Reports right</p></div>
+
+      <article class="task" id="dashboard">
+        <h3>Dashboard</h3>
+        <p class="why">One place to see what is pending across your Branches.</p>
+        <ol class="steps">
+          <li>Click <b>Dashboard</b> in the top menu.</li>
+          <li>Set the filters at the top (Branch, Items, From / To month, Type) and click <span class="btn">Apply</span>.</li>
+          <li>The tiles show audits done, % counted, open queries, pending actions and net variance (excess minus shortage).</li>
+          <li>Tabs: <span class="tab">Audit status</span> (every audit and its stage), <span class="tab">Queries &amp; actions</span> (how old open queries are, overdue actions), <span class="tab">Trend</span> (variance over time), <span class="tab">Repeat items</span> (items with a difference in audits in a row).</li>
+          <li>Click a number to see the rows behind it. Every table has a download button.</li>
+        </ol>
+        <figure><img src="img/dashboard.png" alt="Dashboard Audit status tab" loading="lazy"></figure>
+        <figure><img src="img/dashboard-queries.png" alt="Dashboard Queries and actions tab" loading="lazy"></figure>
+      </article>
+
+      <article class="task" id="reports">
+        <h3>PDF and Excel reports</h3>
+        <ol class="steps">
+          <li>Open an audit.</li>
+          <li><span class="btn out">Excel</span> downloads all lines, variances, remarks, queries and actions.</li>
+          <li><span class="btn" style="background:#11708a">PDF ▾</span> opens a small menu; pick the options and click <b>Download PDF</b>. The PDF has the count summary, Not counted lines, variances, remarks, queries, ticked photos and a signature block.</li>
+        </ol>
+        <figure><img src="img/pdf-menu.png" alt="PDF menu on an audit" loading="lazy"></figure>
+        <p>An audit that is not yet Locked prints with a “DRAFT” mark.</p>
+      </article>
+
+      <article class="task" id="faq">
+        <h3>Questions and problems</h3>
+        <dl class="faq">
+          <dt>I can't see a Branch or an audit.</dt>
+          <dd>You have no rights in that Branch. Ask Admin to tick at least one right for it.</dd>
+          <dt>A button (Freeze, Lock, Reply…) is missing.</dt>
+          <dd>Either you don't have that right in this Branch, or the audit is in a different stage. Check the stage under the audit name.</dd>
+          <dt>I typed a wrong count.</dt>
+          <dd>Before Checking Done: just type the right number. After Checking Done counts can't change; explain it in the query reply or a remark.</dd>
+          <dt>The ERP file was wrong.</dt>
+          <dd>Still ERP Draft: upload the right file again. Already frozen but not counted: ask Admin to cancel the audit and create a new one.</dd>
+          <dt>My login is locked.</dt>
+          <dd>Wait 15 minutes, or ask Admin to reset your password.</dd>
+          <dt>Why is a query still showing in the new audit?</dt>
+          <dd>It is not Closed yet, so it carries forward. Reply, finish the actions and close it.</dd>
+        </dl>
+      </article>
+    </section>
+
+    <footer>Screens in this guide use example data (Alpha Traders, Branches North and South). Your screens show your own companies and items.</footer>
+  </main>
+</div>
+
+<dialog id="zoom" aria-label="Bigger screenshot">
+  <button type="button" aria-label="Close">✕</button>
+  <img alt="">
+</dialog>
+
+<script>
+  // Click a screenshot to see it bigger.
+  const zoom = document.getElementById("zoom");
+  const zoomImg = zoom.querySelector("img");
+  document.querySelectorAll("figure img").forEach((img) => {
+    img.tabIndex = 0;
+    const open = () => { zoomImg.src = img.src; zoomImg.alt = img.alt; zoom.showModal(); };
+    img.addEventListener("click", open);
+    img.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+  });
+  zoom.addEventListener("click", () => zoom.close());
+
+  // Search: hide tasks that don't mention the words typed.
+  const find = document.getElementById("find");
+  const tasks = [...document.querySelectorAll("article.task")];
+  const parts = [...document.querySelectorAll("section.part")];
+  const noHits = document.getElementById("no-hits");
+  find.addEventListener("input", () => {
+    const words = find.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    let hits = 0;
+    tasks.forEach((t) => {
+      const text = t.textContent.toLowerCase() + " " + [...t.querySelectorAll("img")].map((i) => i.alt.toLowerCase()).join(" ");
+      const show = words.every((w) => text.includes(w));
+      t.classList.toggle("hidden-by-search", !show);
+      if (show) hits++;
+    });
+    parts.forEach((p) => p.classList.toggle("hidden-by-search", !p.querySelector("article.task:not(.hidden-by-search)")));
+    noHits.style.display = hits ? "none" : "block";
+  });
+</script>
+</body>
+</html>
